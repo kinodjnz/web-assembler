@@ -1,3 +1,4 @@
+use crate::assembler::parse_and_assemble;
 use crate::parser::Parser;
 use yew::{html, Component, ComponentLink, Html, ShouldRender};
 
@@ -26,7 +27,7 @@ impl Component for Model {
         match msg {
             Msg::Assemble => {
                 let mut parser = Parser::new(self.value.chars());
-                self.code = format!("{:?}", parser.parse_instruction());
+                self.code = format!("{:?}", parse_and_assemble(&mut parser));
                 true
             }
             Msg::TextChanged(value) => {
