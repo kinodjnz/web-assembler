@@ -103,24 +103,30 @@ impl<I: Iterator<Item = char>> Assembler<I> {
         }
     }
 
+    fn is_symbol_of(&mut self, token: &Token, s: &str) -> bool {
+        if let TokenKind::Symbol(symbol) = &token.value {
+            symbol == s
+        } else {
+            false
+        }
+    }
+
     fn parse_operands(&mut self) -> Result<Operands, ParseError> {
         match self.token.take() {
             Some(token) => {
                 let op = self.parse_operand(token)?;
                 match self.token.take() {
-                    Some(token) => match token.value.clone() {
-                        TokenKind::Symbol(s) if s == "," => {
-                            self.fill_token()?;
-                            if let Some(token) = self.token.take() {
-                                let op2 = self.parse_operand(token)?;
-                                self.expect_empty()?;
-                                Ok(Operands::TwoOperands(op, op2))
-                            } else {
-                                Err(ParseError::OperandExpected(token))
-                            }
+                    Some(token) if self.is_symbol_of(&token, ",") => {
+                        self.fill_token()?;
+                        if let Some(token) = self.token.take() {
+                            let op2 = self.parse_operand(token)?;
+                            self.expect_empty()?;
+                            Ok(Operands::TwoOperands(op, op2))
+                        } else {
+                            Err(ParseError::OperandExpected(token))
                         }
-                        _ => Err(ParseError::UnexpectedToken(token)),
-                    },
+                    }
+                    Some(token) => Err(ParseError::UnexpectedToken(token)),
                     _ => Ok(Operands::SingleOperand(op)),
                 }
             }
