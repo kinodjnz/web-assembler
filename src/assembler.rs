@@ -1,10 +1,11 @@
-use crate::lexer::{LexError, Lexer, Token, TokenKind};
+use crate::lexer::{Annot, LexError, Lexer, Token, TokenKind};
 use crate::loc::Loc;
 
 #[derive(Debug)]
 pub struct Assembler<I: Iterator<Item = char>> {
     lexer: Lexer<I>,
     token: Option<Token>,
+    loc: Loc,
 }
 
 #[derive(Debug)]
@@ -34,12 +35,28 @@ pub enum ParseError {
     //UnknownInstruction(Token),
     UnexpectedToken(Token),
     OperandExpected(Token),
+    NumberExpected(Token),
+    TokenExpected(Annot<String>),
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub enum NumberValue {
+    Literal(Annot<String>),
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub enum Indirect {
+    Register(Annot<String>),
+    IndexedPlus(Annot<String>, NumberValue),
+    IndexedMinus(Annot<String>, NumberValue),
+    Immediate(NumberValue),
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum Operand {
-    Register(String),
-    Literal(String),
+    Register(Annot<String>),
+    Literal(Annot<String>),
+    Indirect(Indirect),
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -54,6 +71,7 @@ impl<I: Iterator<Item = char>> Assembler<I> {
         Assembler {
             lexer: Lexer::new(iter),
             token: None,
+            loc: Loc::default(),
         }
     }
 
@@ -62,6 +80,7 @@ impl<I: Iterator<Item = char>> Assembler<I> {
             if token.value == TokenKind::EndOfLine {
                 continue;
             }
+            self.loc = token.loc;
             self.token = Some(token);
             return Ok(());
         }
@@ -74,25 +93,18 @@ impl<I: Iterator<Item = char>> Assembler<I> {
     }
 
     fn fill_token(&mut self) -> Result<(), ParseError> {
-        self.token = if let Some(token) = self.next_token()? {
+        if let Some(token) = self.next_token()? {
             if token.value == TokenKind::EndOfLine {
-                None
+                self.loc = token.loc;
+                self.token = None;
             } else {
-                Some(token)
+                self.loc = token.loc;
+                self.token = Some(token);
             }
         } else {
-            None
+            self.token = None;
         };
         Ok(())
-    }
-
-    fn parse_operand(&mut self, token: Token) -> Result<Operand, ParseError> {
-        self.fill_token()?;
-        match &token.value {
-            TokenKind::Keyword(s) => Ok(Operand::Register(s.clone())),
-            TokenKind::Literal(s) => Ok(Operand::Literal(s.clone())),
-            _ => Err(ParseError::UnexpectedToken(token.clone())),
-        }
     }
 
     fn expect_empty(&mut self) -> Result<(), ParseError> {
@@ -103,11 +115,98 @@ impl<I: Iterator<Item = char>> Assembler<I> {
         }
     }
 
-    fn is_symbol_of(&mut self, token: &Token, s: &str) -> bool {
+    fn expect_symbol(&mut self, s: &str) -> Result<(), ParseError> {
+        if let Some(token) = self.token.take() {
+            self.fill_token()?;
+            match &token.value {
+                TokenKind::Symbol(symbol) if symbol == s => Ok(()),
+                _ => Err(ParseError::UnexpectedToken(token)),
+            }
+        } else {
+            Err(ParseError::TokenExpected(Annot::new(s.into(), self.loc)))
+        }
+    }
+
+    fn is_symbol_of(&self, token: &Token, s: &str) -> bool {
         if let TokenKind::Symbol(symbol) = &token.value {
             symbol == s
         } else {
             false
+        }
+    }
+
+    fn is_next_symbol(&mut self, s: &str) -> Result<bool, ParseError> {
+        if let Some(token) = &self.token {
+            if self.is_symbol_of(&token, s) {
+                self.fill_token()?;
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    fn parse_number(&mut self) -> Result<Annot<String>, ParseError> {
+        if let Some(token) = self.token.take() {
+            self.fill_token()?;
+            match &token.value {
+                TokenKind::Literal(value) => Ok(Annot::new(value.into(), token.loc)),
+                _ => Err(ParseError::NumberExpected(token)),
+            }
+        } else {
+            Err(ParseError::TokenExpected(Annot::new(
+                "number".into(),
+                self.loc,
+            )))
+        }
+    }
+
+    fn parse_register_indirect(&mut self, keyword: Annot<String>) -> Result<Indirect, ParseError> {
+        if self.is_next_symbol("+")? {
+            let number = self.parse_number()?;
+            Ok(Indirect::IndexedPlus(keyword, NumberValue::Literal(number)))
+        } else if self.is_next_symbol("-")? {
+            let number = self.parse_number()?;
+            Ok(Indirect::IndexedMinus(
+                keyword,
+                NumberValue::Literal(number),
+            ))
+        } else {
+            Ok(Indirect::Register(keyword))
+        }
+    }
+
+    fn parse_indirect(&mut self) -> Result<Indirect, ParseError> {
+        let token = self.token.take();
+        self.fill_token()?;
+        match token {
+            Some(token) => match &token.value {
+                TokenKind::Keyword(s) => {
+                    self.parse_register_indirect(Annot::new(s.into(), token.loc))
+                }
+                TokenKind::Literal(s) => Ok(Indirect::Immediate(NumberValue::Literal(Annot::new(
+                    s.into(),
+                    token.loc,
+                )))),
+                _ => Err(ParseError::UnexpectedToken(token.clone())),
+            },
+            _ => Err(ParseError::TokenExpected(Annot::new(
+                "register".into(),
+                self.loc,
+            ))),
+        }
+    }
+
+    fn parse_operand(&mut self, token: Token) -> Result<Operand, ParseError> {
+        self.fill_token()?;
+        match &token.value {
+            TokenKind::Keyword(s) => Ok(Operand::Register(Annot::new(s.into(), token.loc))),
+            TokenKind::Literal(s) => Ok(Operand::Literal(Annot::new(s.into(), token.loc))),
+            TokenKind::Symbol(s) if s == "(" => {
+                let indirect = self.parse_indirect()?;
+                self.expect_symbol(")")?;
+                Ok(Operand::Indirect(indirect))
+            }
+            _ => Err(ParseError::UnexpectedToken(token.clone())),
         }
     }
 

@@ -8,7 +8,7 @@ pub struct Annot<T> {
 }
 
 impl<T> Annot<T> {
-    fn new(value: T, loc: Loc) -> Self {
+    pub fn new(value: T, loc: Loc) -> Self {
         Self { value, loc }
     }
 }
