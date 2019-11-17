@@ -3,6 +3,7 @@ use yew::{html, Component, ComponentLink, Html, ShouldRender};
 
 pub struct Model {
     value: String,
+    code: String,
 }
 
 pub enum Msg {
@@ -17,16 +18,15 @@ impl Component for Model {
     fn create(_: Self::Properties, _: ComponentLink<Self>) -> Self {
         Model {
             value: String::new(),
+            code: String::new(),
         }
     }
 
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
         match msg {
             Msg::Assemble => {
-                // Update your model on events
-                //self.value = "Hello, world".into();
                 let mut parser = Parser::new(self.value.chars());
-                self.value = format!("{:?}", parser.parse_instruction());
+                self.code = format!("{:?}", parser.parse_instruction());
                 true
             }
             Msg::TextChanged(value) => {
@@ -38,7 +38,6 @@ impl Component for Model {
 
     fn view(&self) -> Html<Self> {
         html! {
-            // Render your model here
             <div>
                 <button onclick=|_| Msg::Assemble>{ "assemble" }</button>
                 <div>
@@ -50,6 +49,7 @@ impl Component for Model {
                     </textarea>
                     //<input value=self.value oninput=|e| Msg::TextChanged(e.value)></input>
                 </div>
+                <div><code>{self.code.clone()}</code></div>
             </div>
         }
     }
