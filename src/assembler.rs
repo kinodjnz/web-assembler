@@ -16,14 +16,14 @@ pub struct CodeChunk {
 impl CodeChunk {
     fn new(codes: Vec<u8>) -> Self {
         CodeChunk {
-            codes: codes,
+            codes,
             debug: "".into(),
         }
     }
     fn new_debug(debug: String) -> Self {
         CodeChunk {
             codes: Vec::new(),
-            debug: debug,
+            debug,
         }
     }
 }
@@ -70,7 +70,7 @@ impl<I: Iterator<Item = char>> Assembler<I> {
     }
 
     fn next_token(&mut self) -> Result<Option<Token>, ParseError> {
-        self.lexer.next_token().map_err(|e| ParseError::LexError(e))
+        self.lexer.next_token().map_err(ParseError::LexError)
     }
 
     fn fill_token(&mut self) -> Result<(), ParseError> {
@@ -119,7 +119,7 @@ impl<I: Iterator<Item = char>> Assembler<I> {
                                 Err(ParseError::OperandExpected(token))
                             }
                         }
-                        _ => Err(ParseError::UnexpectedToken(token.clone())),
+                        _ => Err(ParseError::UnexpectedToken(token)),
                     },
                     _ => Ok(Operands::SingleOperand(op)),
                 }
@@ -130,7 +130,7 @@ impl<I: Iterator<Item = char>> Assembler<I> {
 
     fn parse_instruction(
         &mut self,
-        inst: &String,
+        inst: &str,
         _loc: Loc,
     ) -> Result<Option<CodeChunk>, ParseError> {
         match &inst.to_ascii_lowercase()[..] {
