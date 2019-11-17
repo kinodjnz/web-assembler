@@ -150,8 +150,8 @@ impl<I: Iterator<Item = char>> Lexer<I> {
                     'A'..='Z' | 'a'..='z' | '_' => self.lex_keyword(),
                     ' ' | '\x09' => self.lex_whitespace(),
                     '\x0a' | '\x0d' => self.lex_line_end(),
-                    '+' | '*' | '%' | '#' | '[' | ']' | '(' | ')' | '{' | '}' | ',' | '^'
-                    | '-' | ':' | '.' | '<' | '>' | '&' | '|' | '!' => self.lex_symbol(),
+                    '+' | '*' | '%' | '#' | '[' | ']' | '(' | ')' | '{' | '}' | ',' | '^' | '-'
+                    | ':' | '.' | '<' | '>' | '&' | '|' | '!' => self.lex_symbol(),
                     _ => Err(LexError::InvalidCharacter(Annot::new(c, self.loc))),
                 }
             } else {
@@ -171,10 +171,7 @@ fn number_literal_test() {
     let token = lexer.next_token();
     assert_eq!(
         token.unwrap(),
-        Some(Token::new(
-            TokenKind::Literal("123h".to_owned()),
-            Loc(0)
-        ))
+        Some(Token::new(TokenKind::Literal("123h".to_owned()), Loc(0)))
     );
 }
 
@@ -184,10 +181,7 @@ fn keyword_test() {
     let token = lexer.next_token();
     assert_eq!(
         token.unwrap(),
-        Some(Token::new(
-            TokenKind::Keyword("a123".to_owned()),
-            Loc(0)
-        ))
+        Some(Token::new(TokenKind::Keyword("a123".to_owned()), Loc(0)))
     );
 }
 
@@ -203,10 +197,7 @@ fn space_test() {
         (TokenKind::Keyword("scf"), Loc(3)),
     ];
     expected.into_iter().for_each(|(keyword, loc)| {
-        assert_eq!(
-            lexer.next_token().unwrap(),
-            Some(Token::new(keyword, loc))
-        );
+        assert_eq!(lexer.next_token().unwrap(), Some(Token::new(keyword, loc)));
     });
     assert_eq!(lexer.next_token().unwrap(), None);
 }

@@ -1,4 +1,4 @@
-use crate::lexer::{Lexer, Token, TokenKind, LexError};
+use crate::lexer::{LexError, Lexer, Token, TokenKind};
 use crate::loc::Loc;
 
 #[derive(Debug)]
@@ -15,10 +15,16 @@ pub struct CodeChunk {
 
 impl CodeChunk {
     fn new(codes: Vec<u8>) -> Self {
-        CodeChunk { codes: codes, debug: "".into() }
+        CodeChunk {
+            codes: codes,
+            debug: "".into(),
+        }
     }
     fn new_debug(debug: String) -> Self {
-        CodeChunk { codes: Vec::new(), debug: debug }
+        CodeChunk {
+            codes: Vec::new(),
+            debug: debug,
+        }
     }
 }
 
@@ -114,21 +120,25 @@ impl<I: Iterator<Item = char>> Assembler<I> {
                             }
                         }
                         _ => Err(ParseError::UnexpectedToken(token.clone())),
-                    }
+                    },
                     _ => Ok(Operands::SingleOperand(op)),
                 }
             }
-            _ => Ok(Operands::NoOperand)
+            _ => Ok(Operands::NoOperand),
         }
     }
 
-    fn parse_instruction(&mut self, inst: &String, _loc: Loc) -> Result<Option<CodeChunk>, ParseError> {
+    fn parse_instruction(
+        &mut self,
+        inst: &String,
+        _loc: Loc,
+    ) -> Result<Option<CodeChunk>, ParseError> {
         match &inst.to_ascii_lowercase()[..] {
             "ld" => {
                 self.fill_token()?;
                 let operands = self.parse_operands();
                 Ok(Some(CodeChunk::new_debug(format!("{:?}", operands))))
-            },
+            }
             _ => Ok(Some(CodeChunk::new(vec![0]))),
         }
     }

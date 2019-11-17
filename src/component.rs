@@ -1,9 +1,9 @@
-use yew::{html, Component, ComponentLink, Html, ShouldRender};
 use crate::assembler::Assembler;
+use yew::{html, Component, ComponentLink, Html, ShouldRender};
 
 pub struct Model {
     value: String,
- }
+}
 
 pub enum Msg {
     Assemble,
@@ -15,7 +15,9 @@ impl Component for Model {
     type Properties = ();
 
     fn create(_: Self::Properties, _: ComponentLink<Self>) -> Self {
-        Model { value: String::new() }
+        Model {
+            value: String::new(),
+        }
     }
 
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
