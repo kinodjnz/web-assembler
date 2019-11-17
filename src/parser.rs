@@ -2,49 +2,28 @@ use crate::lexer::{Annot, LexError, Lexer, Token, TokenKind};
 use crate::loc::Loc;
 
 #[derive(Debug)]
-pub struct Assembler<I: Iterator<Item = char>> {
+pub struct Parser<I: Iterator<Item = char>> {
     lexer: Lexer<I>,
     token: Option<Token>,
     loc: Loc,
 }
 
-#[derive(Debug)]
-pub struct CodeChunk {
-    codes: Vec<u8>,
-    debug: String,
-}
-
-impl CodeChunk {
-    fn new(codes: Vec<u8>) -> Self {
-        CodeChunk {
-            codes,
-            debug: "".into(),
-        }
-    }
-    fn new_debug(debug: String) -> Self {
-        CodeChunk {
-            codes: Vec::new(),
-            debug,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Debug, Eq, Hash, PartialEq)]
 pub enum ParseError {
     LexError(LexError),
-    //UnknownInstruction(Token),
+    UnknownInstruction(Token),
     UnexpectedToken(Token),
     OperandExpected(Token),
     NumberExpected(Token),
     TokenExpected(Annot<String>),
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Debug, Eq, Hash, PartialEq)]
 pub enum NumberValue {
     Literal(Annot<String>),
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Debug, Eq, Hash, PartialEq)]
 pub enum Indirect {
     Register(Annot<String>),
     IndexedPlus(Annot<String>, NumberValue),
@@ -52,23 +31,40 @@ pub enum Indirect {
     Immediate(NumberValue),
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Debug, Eq, Hash, PartialEq)]
 pub enum Operand {
     Register(Annot<String>),
     Literal(Annot<String>),
     Indirect(Indirect),
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Debug, Eq, Hash, PartialEq)]
 pub enum Operands {
     NoOperand,
     SingleOperand(Operand),
     TwoOperands(Operand, Operand),
 }
 
-impl<I: Iterator<Item = char>> Assembler<I> {
+#[derive(Debug, Eq, Hash, PartialEq)]
+pub struct Opcode(pub &'static str);
+
+const OPCODES: [&str; 67] = [
+    "adc", "add", "and", "bit", "call", "ccf", "cp", "cpd", "cpdr", "cpi", "cpir", "cpl", "daa",
+    "dec", "di", "djnz", "ei", "ex", "exx", "halt", "im", "in", "inc", "ind", "indr", "ini",
+    "inir", "jp", "jr", "ld", "ldd", "lddr", "ldi", "ldir", "neg", "nop", "or", "otdr", "otir",
+    "out", "outd", "outi", "pop", "push", "res", "ret", "reti", "retn", "rl", "rla", "rlc", "rlca",
+    "rld", "rr", "rra", "rrc", "rrca", "rrd", "rst", "sbc", "scf", "set", "sla", "sra", "srl",
+    "sub", "xor",
+];
+
+#[derive(Debug, Eq, Hash, PartialEq)]
+pub enum Instruction {
+    Machine(Opcode, Operands),
+}
+
+impl<I: Iterator<Item = char>> Parser<I> {
     pub fn new(iter: I) -> Self {
-        Assembler {
+        Parser {
             lexer: Lexer::new(iter),
             token: None,
             loc: Loc::default(),
@@ -233,28 +229,25 @@ impl<I: Iterator<Item = char>> Assembler<I> {
         }
     }
 
-    fn parse_instruction(
-        &mut self,
-        inst: &str,
-        _loc: Loc,
-    ) -> Result<Option<CodeChunk>, ParseError> {
-        match &inst.to_ascii_lowercase()[..] {
-            "ld" => {
-                self.fill_token()?;
-                let operands = self.parse_operands();
-                Ok(Some(CodeChunk::new_debug(format!("{:?}", operands))))
+    fn parse_opcode(&mut self) -> Result<Option<Opcode>, ParseError> {
+        if let Some(token) = &self.token {
+            if let TokenKind::Keyword(s) = &token.value {
+                if let Ok(i) = OPCODES.binary_search(&s.as_str()) {
+                    self.fill_token()?;
+                    return Ok(Some(Opcode(OPCODES[i])));
+                }
             }
-            _ => Ok(Some(CodeChunk::new(vec![0]))),
         }
+        Ok(None)
     }
 
-    pub fn parse_next(&mut self) -> Result<Option<CodeChunk>, ParseError> {
+    pub fn parse_instruction(&mut self) -> Result<Option<Instruction>, ParseError> {
         self.fill_nonempty_token()?;
-        if let Some(token) = self.token.take() {
-            match token.value {
-                TokenKind::Keyword(k) => self.parse_instruction(&k, token.loc),
-                _ => Err(ParseError::UnexpectedToken(token.clone())),
-            }
+        if let Some(opcode) = self.parse_opcode()? {
+            let operands = self.parse_operands()?;
+            Ok(Some(Instruction::Machine(opcode, operands)))
+        } else if let Some(token) = self.token.take() {
+            Err(ParseError::UnknownInstruction(token))
         } else {
             Ok(None)
         }

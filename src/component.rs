@@ -1,4 +1,4 @@
-use crate::assembler::Assembler;
+use crate::parser::Parser;
 use yew::{html, Component, ComponentLink, Html, ShouldRender};
 
 pub struct Model {
@@ -25,8 +25,8 @@ impl Component for Model {
             Msg::Assemble => {
                 // Update your model on events
                 //self.value = "Hello, world".into();
-                let mut assembler = Assembler::new(self.value.chars());
-                self.value = format!("{:?}", assembler.parse_next());
+                let mut parser = Parser::new(self.value.chars());
+                self.value = format!("{:?}", parser.parse_instruction());
                 true
             }
             Msg::TextChanged(value) => {
