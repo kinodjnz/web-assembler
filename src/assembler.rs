@@ -1,5 +1,7 @@
 //use crate::lexer::Annot;
-use crate::parser::{Indirect, Instruction, Opcode, Operand, Operands, ParseError, Parser, NumberValue};
+use crate::parser::{
+    Indirect, Instruction, NumberValue, Opcode, Operand, Operands, ParseError, Parser,
+};
 use std::num::ParseIntError;
 
 #[derive(Debug)]
@@ -21,6 +23,7 @@ pub enum AssembleError {
     UnknownRegisterOrFlag,
     IllegalIndirect,
     IllegalIndexedIndirect,
+    IllegalOperand,
 }
 
 #[derive(Debug, Eq, Hash, PartialEq)]
@@ -60,16 +63,16 @@ pub enum AnalyzedOperand {
     M,
     PE,
     PO,
-    Immediate(i32)
+    Immediate(i32),
 }
 
 fn parse_number(s: &str) -> Result<i32, AssembleError> {
     let s = s.to_ascii_lowercase();
     let n = s.len();
-    if s.ends_with("h") {
-        i32::from_str_radix(&s[..(n-1)], 16).map_err(AssembleError::ParseIntError)
-    } else if s.ends_with("b") {
-        i32::from_str_radix(&s[..(n-1)], 2).map_err(AssembleError::ParseIntError)
+    if s.ends_with('h') {
+        i32::from_str_radix(&s[..(n - 1)], 16).map_err(AssembleError::ParseIntError)
+    } else if s.ends_with('b') {
+        i32::from_str_radix(&s[..(n - 1)], 2).map_err(AssembleError::ParseIntError)
     } else {
         i32::from_str_radix(&s, 10).map_err(AssembleError::ParseIntError)
     }
@@ -104,7 +107,7 @@ fn analyze_operand(operand: Operand) -> Result<AnalyzedOperand, AssembleError> {
             "pe" => Ok(AnalyzedOperand::PE),
             "po" => Ok(AnalyzedOperand::PO),
             _ => Err(AssembleError::UnknownRegisterOrFlag),
-        }
+        },
         Operand::Literal(s) => Ok(AnalyzedOperand::Immediate(parse_number(&s.value)?)),
         Operand::Indirect(Indirect::Register(s)) => match s.value.to_ascii_lowercase().as_str() {
             "hl" => Ok(AnalyzedOperand::IndirectHL),
@@ -115,18 +118,24 @@ fn analyze_operand(operand: Operand) -> Result<AnalyzedOperand, AssembleError> {
             "ix" => Ok(AnalyzedOperand::IndirectIX0),
             "iy" => Ok(AnalyzedOperand::IndirectIY0),
             _ => Err(AssembleError::IllegalIndirect),
+        },
+        Operand::Indirect(Indirect::IndexedPlus(s, NumberValue::Literal(n))) => {
+            match s.value.to_ascii_lowercase().as_str() {
+                "ix" => Ok(AnalyzedOperand::IndirectIX(parse_number(&n.value)?)),
+                "iy" => Ok(AnalyzedOperand::IndirectIY(parse_number(&n.value)?)),
+                _ => Err(AssembleError::IllegalIndexedIndirect),
+            }
         }
-        Operand::Indirect(Indirect::IndexedPlus(s, NumberValue::Literal(n))) => match s.value.to_ascii_lowercase().as_str() {
-            "ix" => Ok(AnalyzedOperand::IndirectIX(parse_number(&n.value)?)),
-            "iy" => Ok(AnalyzedOperand::IndirectIY(parse_number(&n.value)?)),
-            _ => Err(AssembleError::IllegalIndexedIndirect),
+        Operand::Indirect(Indirect::IndexedMinus(s, NumberValue::Literal(n))) => {
+            match s.value.to_ascii_lowercase().as_str() {
+                "ix" => Ok(AnalyzedOperand::IndirectIX(-parse_number(&n.value)?)),
+                "iy" => Ok(AnalyzedOperand::IndirectIY(-parse_number(&n.value)?)),
+                _ => Err(AssembleError::IllegalIndexedIndirect),
+            }
         }
-        Operand::Indirect(Indirect::IndexedMinus(s, NumberValue::Literal(n))) => match s.value.to_ascii_lowercase().as_str() {
-            "ix" => Ok(AnalyzedOperand::IndirectIX(-parse_number(&n.value)?)),
-            "iy" => Ok(AnalyzedOperand::IndirectIY(-parse_number(&n.value)?)),
-            _ => Err(AssembleError::IllegalIndexedIndirect),
+        Operand::Indirect(Indirect::Immediate(NumberValue::Literal(n))) => {
+            Ok(AnalyzedOperand::Indirect(parse_number(&n.value)?))
         }
-        Operand::Indirect(Indirect::Immediate(NumberValue::Literal(n))) => Ok(AnalyzedOperand::Indirect(parse_number(&n.value)?)),
     }
 }
 
@@ -185,20 +194,20 @@ fn gen_ind_hlx1(c: u8, r: AnalyzedOperand) -> CodeChunk {
 
 fn reg8(c: u8, r: AnalyzedOperand) -> u8 {
     match r {
-        AnalyzedOperand::A => c+7,
-        AnalyzedOperand::B => c+0,
-        AnalyzedOperand::C => c+1,
-        AnalyzedOperand::D => c+2,
-        AnalyzedOperand::E => c+3,
-        AnalyzedOperand::H => c+4,
-        AnalyzedOperand::L => c+5,
+        AnalyzedOperand::A => c + 7,
+        AnalyzedOperand::B => c,
+        AnalyzedOperand::C => c + 1,
+        AnalyzedOperand::D => c + 2,
+        AnalyzedOperand::E => c + 3,
+        AnalyzedOperand::H => c + 4,
+        AnalyzedOperand::L => c + 5,
         _ => panic!("reg8 expected"),
     }
 }
 
 fn reg16(c: u8, rr: AnalyzedOperand) -> u8 {
     match rr {
-        AnalyzedOperand::BC => c + 0x00,
+        AnalyzedOperand::BC => c,
         AnalyzedOperand::DE => c + 0x10,
         AnalyzedOperand::HL => c + 0x20,
         AnalyzedOperand::SP => c + 0x30,
@@ -208,7 +217,9 @@ fn reg16(c: u8, rr: AnalyzedOperand) -> u8 {
 
 type AO = AnalyzedOperand;
 
-fn two_operands(operands: Operands) -> Result<Option<(AnalyzedOperand, AnalyzedOperand)>, AssembleError> {
+fn two_operands(
+    operands: Operands,
+) -> Result<Option<(AnalyzedOperand, AnalyzedOperand)>, AssembleError> {
     if let Operands::TwoOperands(opr1, opr2) = operands {
         let opr1 = analyze_operand(opr1)?;
         let opr2 = analyze_operand(opr2)?;
@@ -218,7 +229,9 @@ fn two_operands(operands: Operands) -> Result<Option<(AnalyzedOperand, AnalyzedO
     }
 }
 
-fn expect_two_operands(operands: Operands) -> Result<(AnalyzedOperand, AnalyzedOperand), AssembleError> {
+fn expect_two_operands(
+    operands: Operands,
+) -> Result<(AnalyzedOperand, AnalyzedOperand), AssembleError> {
     two_operands(operands)?.map_or_else(|| Err(AssembleError::TwoOperandsExpected), Result::Ok)
 }
 
@@ -228,7 +241,25 @@ fn assemble_adc(operands: Operands) -> Result<CodeChunk, AssembleError> {
         (AO::A, r) if is_reg8(&r) => Ok(gen1(reg8(88, r))),
         (AO::A, AO::Immediate(n)) => Ok(gen2(0xce, n as u8)),
         (AO::HL, rr) if is_reg16(&rr) => Ok(gen2(0xed, reg16(0x4a, rr))),
-        _ => Ok(CodeChunk::new(vec![1])),
+        _ => Err(AssembleError::IllegalOperand),
+    }
+}
+
+fn assemble_add(operands: Operands) -> Result<CodeChunk, AssembleError> {
+    match expect_two_operands(operands)? {
+        (AO::A, ii) if is_ind_hlx(&ii) => Ok(gen_ind_hlx1(0x86, ii)),
+        (AO::A, r) if is_reg8(&r) => Ok(gen1(reg8(80, r))),
+        (AO::A, AO::Immediate(n)) => Ok(gen2(0xc6, n as u8)),
+        (AO::HL, rr) if is_reg16(&rr) => Ok(gen1(reg16(0x09, rr))),
+        (AO::IX, AO::BC) => Ok(gen2(0xdd, 0x09)),
+        (AO::IX, AO::DE) => Ok(gen2(0xdd, 0x19)),
+        (AO::IX, AO::IX) => Ok(gen2(0xdd, 0x29)),
+        (AO::IX, AO::SP) => Ok(gen2(0xdd, 0x39)),
+        (AO::IY, AO::BC) => Ok(gen2(0xfd, 0x09)),
+        (AO::IY, AO::DE) => Ok(gen2(0xfd, 0x19)),
+        (AO::IY, AO::IY) => Ok(gen2(0xfd, 0x29)),
+        (AO::IY, AO::SP) => Ok(gen2(0xfd, 0x39)),
+        _ => Err(AssembleError::IllegalOperand),
     }
 }
 
@@ -238,6 +269,7 @@ fn assemble_machine_instruction(
 ) -> Result<CodeChunk, AssembleError> {
     match opcode.0 {
         "adc" => assemble_adc(operands),
+        "add" => assemble_add(operands),
         _ => Ok(CodeChunk { code: vec![2] }),
     }
 }
