@@ -208,18 +208,22 @@ fn reg16(c: u8, rr: AnalyzedOperand) -> u8 {
 
 type AO = AnalyzedOperand;
 
-fn two_operands(operands: Operands) -> Result<(AnalyzedOperand, AnalyzedOperand), AssembleError> {
+fn two_operands(operands: Operands) -> Result<Option<(AnalyzedOperand, AnalyzedOperand)>, AssembleError> {
     if let Operands::TwoOperands(opr1, opr2) = operands {
         let opr1 = analyze_operand(opr1)?;
         let opr2 = analyze_operand(opr2)?;
-        Ok((opr1, opr2))
+        Ok(Some((opr1, opr2)))
     } else {
-        Err(AssembleError::TwoOperandsExpected)
+        Ok(None)
     }
 }
 
+fn expect_two_operands(operands: Operands) -> Result<(AnalyzedOperand, AnalyzedOperand), AssembleError> {
+    two_operands(operands)?.map_or_else(|| Err(AssembleError::TwoOperandsExpected), Result::Ok)
+}
+
 fn assemble_adc(operands: Operands) -> Result<CodeChunk, AssembleError> {
-    match two_operands(operands)? {
+    match expect_two_operands(operands)? {
         (AO::A, ii) if is_ind_hlx(&ii) => Ok(gen_ind_hlx1(0x8e, ii)),
         (AO::A, r) if is_reg8(&r) => Ok(gen1(reg8(88, r))),
         (AO::A, AO::Immediate(n)) => Ok(gen2(0xce, n as u8)),
