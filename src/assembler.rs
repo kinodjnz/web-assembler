@@ -571,6 +571,16 @@ fn assemble_out(operands: Operands) -> Result<CodeChunk, AssembleError> {
     }
 }
 
+fn assemble_push_pop(operands: Operands, op_base: u8) -> Result<CodeChunk, AssembleError> {
+    match expect_single_operand(operands)? {
+        AO::BC => Ok(gen1(op_base)),
+        AO::DE => Ok(gen1(op_base + 0x10)),
+        AO::AF => Ok(gen1(op_base + 0x30)),
+        rr if is_hlxy(&rr) => Ok(gen_reg16xy(op_base, rr)),
+        _ => Err(AssembleError::IllegalOperand),
+    }
+}
+
 fn assemble_machine_instruction(
     opcode: Opcode,
     operands: Operands,
@@ -618,6 +628,8 @@ fn assemble_machine_instruction(
         "out" => assemble_out(operands),
         "outd" => assemble_no_operand2(operands, 0xed, 0xab),
         "outi" => assemble_no_operand2(operands, 0xed, 0xa3),
+        "pop" => assemble_push_pop(operands, 0xc1),
+        "push" => assemble_push_pop(operands, 0xc5),
         _ => Ok(CodeChunk { code: vec![2] }),
     }
 }
