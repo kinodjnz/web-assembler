@@ -563,6 +563,14 @@ fn assemble_ld(operands: Operands) -> Result<CodeChunk, AssembleError> {
     }
 }
 
+fn assemble_out(operands: Operands) -> Result<CodeChunk, AssembleError> {
+    match expect_two_operands(operands)? {
+        (AO::IndirectC, r) if is_reg8(&r) => Ok(gen2(0xed, reg8_3(0x41, r))),
+        (AO::Indirect(n), AO::A) => Ok(gen2(0xd3, n as u8)),
+        _ => Err(AssembleError::IllegalOperand),
+    }
+}
+
 fn assemble_machine_instruction(
     opcode: Opcode,
     operands: Operands,
@@ -607,6 +615,7 @@ fn assemble_machine_instruction(
         "or" => assemble_acc_operation(operands, 0xb0),
         "otdr" => assemble_no_operand2(operands, 0xed, 0xbb),
         "otir" => assemble_no_operand2(operands, 0xed, 0xb3),
+        "out" => assemble_out(operands),
         "outd" => assemble_no_operand2(operands, 0xed, 0xab),
         "outi" => assemble_no_operand2(operands, 0xed, 0xa3),
         _ => Ok(CodeChunk { code: vec![2] }),
