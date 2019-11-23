@@ -19,6 +19,7 @@ impl CodeChunk {
 pub enum AssembleError {
     ParseError(ParseError),
     ParseIntError(ParseIntError),
+    NoOperandExpected,
     SingleOperandExpected,
     TwoOperandsExpected,
     UnknownRegisterOrFlag,
@@ -295,6 +296,13 @@ fn analyze_operands(operands: Operands) -> Result<AnalyzedOperands, AssembleErro
     }
 }
 
+fn expect_no_operand(operands: Operands) -> Result<(), AssembleError> {
+    match analyze_operands(operands)? {
+        AnalyzedOperands::NoOperand => Ok(()),
+        _ => Err(AssembleError::NoOperandExpected),
+    }
+}
+
 fn expect_single_operand(operands: Operands) -> Result<AnalyzedOperand, AssembleError> {
     match analyze_operands(operands)? {
         AnalyzedOperands::SingleOperand(opr) => Ok(opr),
@@ -309,6 +317,25 @@ fn expect_two_operands(
         AnalyzedOperands::TwoOperands(opr1, opr2) => Ok((opr1, opr2)),
         _ => Err(AssembleError::TwoOperandsExpected),
     }
+}
+
+fn assemble_acc_operation(operands: Operands, op_base: u8) -> Result<CodeChunk, AssembleError> {
+    match expect_single_operand(operands)? {
+        ii if is_ind_hlx(&ii) => Ok(gen_ind_hlx1(op_base + 0x06, ii)),
+        AO::Immediate(n) => Ok(gen2(op_base + 0x46, n as u8)),
+        r if is_reg8(&r) => Ok(gen1(reg8(op_base, r))),
+        _ => Err(AssembleError::IllegalOperand),
+    }
+}
+
+fn assemble_no_operand1(operands: Operands, c: u8) -> Result<CodeChunk, AssembleError> {
+    expect_no_operand(operands)?;
+    Ok(gen1(c))
+}
+
+fn assemble_no_operand2(operands: Operands, c1: u8, c2: u8) -> Result<CodeChunk, AssembleError> {
+    expect_no_operand(operands)?;
+    Ok(gen2(c1, c2))
 }
 
 fn assemble_adc(operands: Operands) -> Result<CodeChunk, AssembleError> {
@@ -339,15 +366,6 @@ fn assemble_add(operands: Operands) -> Result<CodeChunk, AssembleError> {
     }
 }
 
-fn assemble_and(operands: Operands) -> Result<CodeChunk, AssembleError> {
-    match expect_single_operand(operands)? {
-        ii if is_ind_hlx(&ii) => Ok(gen_ind_hlx1(0xa6, ii)),
-        AO::Immediate(n) => Ok(gen2(0xe6, n as u8)),
-        r if is_reg8(&r) => Ok(gen1(reg8(0xa0, r))),
-        _ => Err(AssembleError::IllegalOperand),
-    }
-}
-
 fn assemble_bit(operands: Operands) -> Result<CodeChunk, AssembleError> {
     match expect_two_operands(operands)? {
         (AO::Immediate(b), ii) if is_ind_hlx(&ii) => Ok(gen_ind_hlx2(0xcb, bit(0x46, b)?, ii)),
@@ -373,9 +391,12 @@ fn assemble_machine_instruction(
     match opcode.0 {
         "adc" => assemble_adc(operands),
         "add" => assemble_add(operands),
-        "and" => assemble_and(operands),
+        "and" => assemble_acc_operation(operands, 0xa0),
         "bit" => assemble_bit(operands),
         "call" => assemble_call(operands),
+        "ccf" => assemble_no_operand1(operands, 0xcf),
+        "cp" => assemble_acc_operation(operands, 0xb8),
+        "cpd" => assemble_no_operand2(operands, 0xed, 0xa9),
         _ => Ok(CodeChunk { code: vec![2] }),
     }
 }
