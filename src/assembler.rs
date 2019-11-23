@@ -457,6 +457,15 @@ fn assemble_im(operands: Operands) -> Result<CodeChunk, AssembleError> {
     }
 }
 
+fn assemble_in(operands: Operands) -> Result<CodeChunk, AssembleError> {
+    match expect_two_operands(operands)? {
+        (r, AO::IndirectC) if is_reg8(&r) => Ok(gen2(0xed, reg8_3(0x40, r))),
+        (AO::A, AO::Indirect(n)) => Ok(gen2(0xdb, n as u8)),
+        (AO::F, AO::IndirectC) => Ok(gen2(0xed, 0x70)),
+        _ => Err(AssembleError::IllegalOperand),
+    }
+}
+
 fn assemble_machine_instruction(
     opcode: Opcode,
     operands: Operands,
@@ -483,6 +492,7 @@ fn assemble_machine_instruction(
         "exx" => assemble_no_operand1(operands, 0xd9),
         "halt" => assemble_no_operand1(operands, 0x76),
         "im" => assemble_im(operands),
+        "in" => assemble_in(operands),
         _ => Ok(CodeChunk { code: vec![2] }),
     }
 }
