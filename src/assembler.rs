@@ -444,6 +444,7 @@ fn assemble_machine_instruction(
         "cpl" => assemble_no_operand1(operands, 0x2f),
         "daa" => assemble_no_operand1(operands, 0x27),
         "dec" => assemble_dec(operands),
+        "di" => assemble_no_operand1(operands, 0xf3),
         _ => Ok(CodeChunk { code: vec![2] }),
     }
 }
