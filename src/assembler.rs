@@ -660,6 +660,15 @@ fn assemble_machine_instruction(
         "reti" => assemble_no_operand2(operands, 0xed, 0x4d),
         "retn" => assemble_no_operand2(operands, 0xed, 0x45),
         "rl" => assemble_shift_rotate(operands, 0x10),
+        "rla" => assemble_no_operand1(operands, 0x17),
+        "rlc" => assemble_shift_rotate(operands, 0x00),
+        "rlca" => assemble_no_operand1(operands, 0x07),
+        "rld" => assemble_no_operand2(operands, 0xed, 0x6f),
+        "rr" => assemble_shift_rotate(operands, 0x18),
+        "rra" => assemble_no_operand1(operands, 0x1f),
+        "rrc" => assemble_shift_rotate(operands, 0x08),
+        "rrca" => assemble_no_operand1(operands, 0x0f),
+        "rrd" => assemble_no_operand2(operands, 0xed, 0x67),
         _ => Ok(CodeChunk { code: vec![2] }),
     }
 }
