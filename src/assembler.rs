@@ -397,6 +397,11 @@ fn assemble_machine_instruction(
         "ccf" => assemble_no_operand1(operands, 0xcf),
         "cp" => assemble_acc_operation(operands, 0xb8),
         "cpd" => assemble_no_operand2(operands, 0xed, 0xa9),
+        "cpdr" => assemble_no_operand2(operands, 0xed, 0xb9),
+        "cpi" => assemble_no_operand2(operands, 0xed, 0xa1),
+        "cpir" => assemble_no_operand2(operands, 0xed, 0xb1),
+        "cpl" => assemble_no_operand1(operands, 0x2f),
+        "daa" => assemble_no_operand1(operands, 0x27),
         _ => Ok(CodeChunk { code: vec![2] }),
     }
 }
