@@ -649,6 +649,8 @@ fn assemble_machine_instruction(
         "push" => assemble_push_pop(operands, 0xc5),
         "res" => assemble_bit_operation(operands, 0x80),
         "ret" => assemble_ret(operands),
+        "reti" => assemble_no_operand2(operands, 0xed, 0x4d),
+        "retn" => assemble_no_operand2(operands, 0xed, 0x45),
         _ => Ok(CodeChunk { code: vec![2] }),
     }
 }
