@@ -215,6 +215,13 @@ fn is_cond(c: &AnalyzedOperand) -> bool {
     }
 }
 
+fn is_cond_rel(c: &AnalyzedOperand) -> bool {
+    match c {
+        AnalyzedOperand::C | AnalyzedOperand::NC | AnalyzedOperand::Z | AnalyzedOperand::NZ => true,
+        _ => false,
+    }
+}
+
 fn lower_byte(n: u16) -> u8 {
     (n & 0xff) as u8
 }
@@ -488,6 +495,16 @@ fn assemble_jp(operands: Operands) -> Result<CodeChunk, AssembleError> {
     }
 }
 
+fn assemble_jr(operands: Operands) -> Result<CodeChunk, AssembleError> {
+    match analyze_operands(operands)? {
+        AnalyzedOperands::SingleOperand(AO::Immediate(n)) => Ok(gen2(0x18, n as u8)),
+        AnalyzedOperands::TwoOperands(c, AO::Immediate(n)) if is_cond_rel(&c) => {
+            Ok(gen2(cond(0x20, c), n as u8))
+        }
+        _ => Err(AssembleError::IllegalOperand),
+    }
+}
+
 fn assemble_machine_instruction(
     opcode: Opcode,
     operands: Operands,
@@ -521,6 +538,7 @@ fn assemble_machine_instruction(
         "ini" => assemble_no_operand2(operands, 0xed, 0xa2),
         "inir" => assemble_no_operand2(operands, 0xed, 0xb2),
         "jp" => assemble_jp(operands),
+        "jr" => assemble_jr(operands),
         _ => Ok(CodeChunk { code: vec![2] }),
     }
 }
