@@ -453,6 +453,7 @@ fn assemble_machine_instruction(
         "dec" => assemble_dec(operands),
         "di" => assemble_no_operand1(operands, 0xf3),
         "djnz" => assemble_djnz(operands),
+        "ei" => assemble_no_operand1(operands, 0xfb),
         _ => Ok(CodeChunk { code: vec![2] }),
     }
 }
