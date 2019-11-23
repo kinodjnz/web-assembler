@@ -604,6 +604,7 @@ fn assemble_machine_instruction(
         "ldir" => assemble_no_operand2(operands, 0xed, 0xb0),
         "neg" => assemble_no_operand2(operands, 0xed, 0x44),
         "nop" => assemble_no_operand1(operands, 0x00),
+        "or" => assemble_acc_operation(operands, 0xb0),
         _ => Ok(CodeChunk { code: vec![2] }),
     }
 }
