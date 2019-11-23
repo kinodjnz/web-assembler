@@ -229,6 +229,13 @@ fn is_cond_rel(c: &AnalyzedOperand) -> bool {
     }
 }
 
+fn is_rst(n: i32) -> bool {
+    match n {
+        0x00 | 0x08 | 0x10 | 0x18 | 0x20 | 0x28 | 0x30 | 0x38 => true,
+        _ => false,
+    }
+}
+
 fn lower_byte(n: u16) -> u8 {
     (n & 0xff) as u8
 }
@@ -606,6 +613,13 @@ fn assemble_ret(operands: Operands) -> Result<CodeChunk, AssembleError> {
     }
 }
 
+fn assemble_rst(operands: Operands) -> Result<CodeChunk, AssembleError> {
+    match expect_single_operand(operands)? {
+        AO::Immediate(n) if is_rst(n) => Ok(gen1(0xc7 + n as u8)),
+        _ => Err(AssembleError::IllegalOperand),
+    }
+}
+
 fn assemble_machine_instruction(
     opcode: Opcode,
     operands: Operands,
@@ -669,6 +683,7 @@ fn assemble_machine_instruction(
         "rrc" => assemble_shift_rotate(operands, 0x08),
         "rrca" => assemble_no_operand1(operands, 0x0f),
         "rrd" => assemble_no_operand2(operands, 0xed, 0x67),
+        "rst" => assemble_rst(operands),
         _ => Ok(CodeChunk { code: vec![2] }),
     }
 }
