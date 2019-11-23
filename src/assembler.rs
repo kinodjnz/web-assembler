@@ -598,6 +598,12 @@ fn assemble_machine_instruction(
         "jp" => assemble_jp(operands),
         "jr" => assemble_jr(operands),
         "ld" => assemble_ld(operands),
+        "ldd" => assemble_no_operand2(operands, 0xed, 0xa8),
+        "lddr" => assemble_no_operand2(operands, 0xed, 0xb8),
+        "ldi" => assemble_no_operand2(operands, 0xed, 0xa0),
+        "ldir" => assemble_no_operand2(operands, 0xed, 0xb0),
+        "neg" => assemble_no_operand2(operands, 0xed, 0x44),
+        "nop" => assemble_no_operand1(operands, 0x00),
         _ => Ok(CodeChunk { code: vec![2] }),
     }
 }
