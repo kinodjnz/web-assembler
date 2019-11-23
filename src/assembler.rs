@@ -695,6 +695,13 @@ fn assemble_machine_instruction(
         "rrd" => assemble_no_operand2(operands, 0xed, 0x67),
         "rst" => assemble_rst(operands),
         "sbc" => assemble_sbc(operands),
+        "scf" => assemble_no_operand1(operands, 0x37),
+        "set" => assemble_bit_operation(operands, 0xc0),
+        "sla" => assemble_shift_rotate(operands, 0x20),
+        "sra" => assemble_shift_rotate(operands, 0x28),
+        "srl" => assemble_shift_rotate(operands, 0x38),
+        "sub" => assemble_acc_operation(operands, 0x90),
+        "xor" => assemble_acc_operation(operands, 0xa8),
         _ => Ok(CodeChunk { code: vec![2] }),
     }
 }
