@@ -13,6 +13,13 @@ impl CodeChunk {
     pub fn new(code: Vec<u8>) -> Self {
         CodeChunk { code }
     }
+
+    pub fn to_hex(&self) -> String {
+        self.code
+            .iter()
+            .map(|x| format!("{:02x} ", x))
+            .collect::<String>()
+    }
 }
 
 #[derive(Debug, Eq, PartialEq)]

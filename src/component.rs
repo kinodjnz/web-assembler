@@ -27,7 +27,10 @@ impl Component for Model {
         match msg {
             Msg::Assemble => {
                 let mut parser = Parser::new(self.value.chars());
-                self.code = format!("{:?}", parse_and_assemble(&mut parser));
+                self.code = match parse_and_assemble(&mut parser) {
+                    Ok(code) => code.to_hex(),
+                    other => format!("{:?}", other),
+                };
                 true
             }
             Msg::TextChanged(value) => {
