@@ -471,6 +471,8 @@ fn assemble_machine_instruction(
         "djnz" => assemble_djnz(operands),
         "ei" => assemble_no_operand1(operands, 0xfb),
         "ex" => assemble_ex(operands),
+        "exx" => assemble_no_operand1(operands, 0xd9),
+        "halt" => assemble_no_operand1(operands, 0x76),
         _ => Ok(CodeChunk { code: vec![2] }),
     }
 }
