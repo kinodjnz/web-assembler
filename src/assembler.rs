@@ -583,6 +583,14 @@ fn assemble_out(operands: Operands) -> Result<CodeChunk, AssembleError> {
     }
 }
 
+fn assemble_ret(operands: Operands) -> Result<CodeChunk, AssembleError> {
+    match analyze_operands(operands)? {
+        AnalyzedOperands::NoOperand => Ok(gen1(0xc9)),
+        AnalyzedOperands::SingleOperand(c) if is_cond(&c) => Ok(gen1(cond(0xc0, c))),
+        _ => Err(AssembleError::IllegalOperand),
+    }
+}
+
 fn assemble_machine_instruction(
     opcode: Opcode,
     operands: Operands,
@@ -633,6 +641,7 @@ fn assemble_machine_instruction(
         "pop" => assemble_push_pop(operands, 0xc1),
         "push" => assemble_push_pop(operands, 0xc5),
         "res" => assemble_bit_operation(operands, 0x80),
+        "ret" => assemble_ret(operands),
         _ => Ok(CodeChunk { code: vec![2] }),
     }
 }
