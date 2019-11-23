@@ -29,6 +29,13 @@ pub enum AssembleError {
 }
 
 #[derive(Debug, Eq, Hash, PartialEq)]
+pub enum AnalyzedOperands {
+    NoOperand,
+    SingleOperand(AnalyzedOperand),
+    TwoOperands(AnalyzedOperand, AnalyzedOperand),
+}
+
+#[derive(Debug, Eq, Hash, PartialEq)]
 pub enum AnalyzedOperand {
     A,
     B,
@@ -143,36 +150,57 @@ fn analyze_operand(operand: Operand) -> Result<AnalyzedOperand, AssembleError> {
 
 fn is_reg8(r: &AnalyzedOperand) -> bool {
     match r {
-        AnalyzedOperand::A => true,
-        AnalyzedOperand::B => true,
-        AnalyzedOperand::C => true,
-        AnalyzedOperand::D => true,
-        AnalyzedOperand::E => true,
-        AnalyzedOperand::H => true,
-        AnalyzedOperand::L => true,
+        AnalyzedOperand::A
+        | AnalyzedOperand::B
+        | AnalyzedOperand::C
+        | AnalyzedOperand::D
+        | AnalyzedOperand::E
+        | AnalyzedOperand::H
+        | AnalyzedOperand::L => true,
         _ => false,
     }
 }
 
 fn is_reg16(rr: &AnalyzedOperand) -> bool {
     match rr {
-        AnalyzedOperand::BC => true,
-        AnalyzedOperand::DE => true,
-        AnalyzedOperand::HL => true,
-        AnalyzedOperand::SP => true,
+        AnalyzedOperand::BC | AnalyzedOperand::DE | AnalyzedOperand::HL | AnalyzedOperand::SP => {
+            true
+        }
         _ => false,
     }
 }
 
 fn is_ind_hlx(r: &AnalyzedOperand) -> bool {
     match r {
-        AnalyzedOperand::IndirectHL => true,
-        AnalyzedOperand::IndirectIX(_) => true,
-        AnalyzedOperand::IndirectIY(_) => true,
-        AnalyzedOperand::IndirectIX0 => true,
-        AnalyzedOperand::IndirectIY0 => true,
+        AnalyzedOperand::IndirectHL
+        | AnalyzedOperand::IndirectIX(_)
+        | AnalyzedOperand::IndirectIY(_)
+        | AnalyzedOperand::IndirectIX0
+        | AnalyzedOperand::IndirectIY0 => true,
         _ => false,
     }
+}
+
+fn is_cond(c: &AnalyzedOperand) -> bool {
+    match c {
+        AnalyzedOperand::C
+        | AnalyzedOperand::NC
+        | AnalyzedOperand::Z
+        | AnalyzedOperand::NZ
+        | AnalyzedOperand::P
+        | AnalyzedOperand::M
+        | AnalyzedOperand::PE
+        | AnalyzedOperand::PO => true,
+        _ => false,
+    }
+}
+
+fn lower_byte(n: u16) -> u8 {
+    (n & 0xff) as u8
+}
+
+fn upper_byte(n: u16) -> u8 {
+    (n >> 8) as u8
 }
 
 fn gen1(c: u8) -> CodeChunk {
@@ -181,6 +209,10 @@ fn gen1(c: u8) -> CodeChunk {
 
 fn gen2(c1: u8, c2: u8) -> CodeChunk {
     CodeChunk::new(vec![c1, c2])
+}
+
+fn gen1_imm16(c: u8, n: u16) -> CodeChunk {
+    CodeChunk::new(vec![c, lower_byte(n), upper_byte(n)])
 }
 
 fn gen_ind_hlx1(c: u8, r: AnalyzedOperand) -> CodeChunk {
@@ -236,37 +268,47 @@ fn bit(c: u8, b: i32) -> Result<u8, AssembleError> {
     }
 }
 
-type AO = AnalyzedOperand;
-
-fn single_operand(operands: Operands) -> Result<Option<AnalyzedOperand>, AssembleError> {
-    if let Operands::SingleOperand(opr) = operands {
-        let opr = analyze_operand(opr)?;
-        Ok(Some(opr))
-    } else {
-        Ok(None)
+fn cond(c1: u8, c: AnalyzedOperand) -> u8 {
+    c1 + match c {
+        AnalyzedOperand::NZ => 0x00,
+        AnalyzedOperand::Z => 0x08,
+        AnalyzedOperand::NC => 0x10,
+        AnalyzedOperand::C => 0x18,
+        AnalyzedOperand::PO => 0x20,
+        AnalyzedOperand::PE => 0x28,
+        AnalyzedOperand::P => 0x30,
+        AnalyzedOperand::M => 0x38,
+        _ => panic!("cond expected"),
     }
 }
 
-fn two_operands(
-    operands: Operands,
-) -> Result<Option<(AnalyzedOperand, AnalyzedOperand)>, AssembleError> {
-    if let Operands::TwoOperands(opr1, opr2) = operands {
-        let opr1 = analyze_operand(opr1)?;
-        let opr2 = analyze_operand(opr2)?;
-        Ok(Some((opr1, opr2)))
-    } else {
-        Ok(None)
+type AO = AnalyzedOperand;
+
+fn analyze_operands(operands: Operands) -> Result<AnalyzedOperands, AssembleError> {
+    match operands {
+        Operands::NoOperand => Ok(AnalyzedOperands::NoOperand),
+        Operands::SingleOperand(opr) => Ok(AnalyzedOperands::SingleOperand(analyze_operand(opr)?)),
+        Operands::TwoOperands(opr1, opr2) => Ok(AnalyzedOperands::TwoOperands(
+            analyze_operand(opr1)?,
+            analyze_operand(opr2)?,
+        )),
     }
 }
 
 fn expect_single_operand(operands: Operands) -> Result<AnalyzedOperand, AssembleError> {
-    single_operand(operands)?.map_or_else(|| Err(AssembleError::SingleOperandExpected), Result::Ok)
+    match analyze_operands(operands)? {
+        AnalyzedOperands::SingleOperand(opr) => Ok(opr),
+        _ => Err(AssembleError::SingleOperandExpected),
+    }
 }
 
 fn expect_two_operands(
     operands: Operands,
 ) -> Result<(AnalyzedOperand, AnalyzedOperand), AssembleError> {
-    two_operands(operands)?.map_or_else(|| Err(AssembleError::TwoOperandsExpected), Result::Ok)
+    match analyze_operands(operands)? {
+        AnalyzedOperands::TwoOperands(opr1, opr2) => Ok((opr1, opr2)),
+        _ => Err(AssembleError::TwoOperandsExpected),
+    }
 }
 
 fn assemble_adc(operands: Operands) -> Result<CodeChunk, AssembleError> {
@@ -314,6 +356,16 @@ fn assemble_bit(operands: Operands) -> Result<CodeChunk, AssembleError> {
     }
 }
 
+fn assemble_call(operands: Operands) -> Result<CodeChunk, AssembleError> {
+    match analyze_operands(operands)? {
+        AnalyzedOperands::SingleOperand(AO::Immediate(n)) => Ok(gen1_imm16(0xcd, n as u16)),
+        AnalyzedOperands::TwoOperands(c, AO::Immediate(n)) if is_cond(&c) => {
+            Ok(gen1_imm16(cond(0xc4, c), n as u16))
+        }
+        _ => Err(AssembleError::IllegalOperand),
+    }
+}
+
 fn assemble_machine_instruction(
     opcode: Opcode,
     operands: Operands,
@@ -323,7 +375,7 @@ fn assemble_machine_instruction(
         "add" => assemble_add(operands),
         "and" => assemble_and(operands),
         "bit" => assemble_bit(operands),
-
+        "call" => assemble_call(operands),
         _ => Ok(CodeChunk { code: vec![2] }),
     }
 }
