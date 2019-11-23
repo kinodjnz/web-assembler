@@ -55,7 +55,7 @@ pub enum AnalyzedOperand {
     SP,
     IX,
     IY,
-    //AFPrime,
+    AFPrime,
     IndirectHL,
     IndirectBC,
     IndirectDE,
@@ -179,6 +179,13 @@ fn is_reg16xy(rr: &AnalyzedOperand) -> bool {
         | AnalyzedOperand::SP
         | AnalyzedOperand::IX
         | AnalyzedOperand::IY => true,
+        _ => false,
+    }
+}
+
+fn is_hlxy(rr: &AnalyzedOperand) -> bool {
+    match rr {
+        AnalyzedOperand::HL | AnalyzedOperand::IX | AnalyzedOperand::IY => true,
         _ => false,
     }
 }
@@ -432,6 +439,15 @@ fn assemble_djnz(operands: Operands) -> Result<CodeChunk, AssembleError> {
     }
 }
 
+fn assemble_ex(operands: Operands) -> Result<CodeChunk, AssembleError> {
+    match expect_two_operands(operands)? {
+        (AO::IndirectSP, rr) if is_hlxy(&rr) => Ok(gen_reg16xy(0xc3, rr)),
+        (AO::AF, AO::AFPrime) => Ok(gen1(0x08)),
+        (AO::DE, AO::HL) => Ok(gen1(0xeb)),
+        _ => Err(AssembleError::IllegalOperand),
+    }
+}
+
 fn assemble_machine_instruction(
     opcode: Opcode,
     operands: Operands,
@@ -454,6 +470,7 @@ fn assemble_machine_instruction(
         "di" => assemble_no_operand1(operands, 0xf3),
         "djnz" => assemble_djnz(operands),
         "ei" => assemble_no_operand1(operands, 0xfb),
+        "ex" => assemble_ex(operands),
         _ => Ok(CodeChunk { code: vec![2] }),
     }
 }
