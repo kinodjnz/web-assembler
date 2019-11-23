@@ -249,7 +249,7 @@ fn gen1_imm16(c: u8, nn: u16) -> CodeChunk {
     CodeChunk::new(vec![c, lower_byte(nn), upper_byte(nn)])
 }
 
-fn gen_ind_hlxy1(c: u8, r: AnalyzedOperand) -> CodeChunk {
+fn gen1_ind_hlxy(c: u8, r: AnalyzedOperand) -> CodeChunk {
     CodeChunk::new(match r {
         AnalyzedOperand::IndirectHL => vec![c],
         AnalyzedOperand::IndirectIX(o) => vec![0xdd, c, o as u8],
@@ -260,7 +260,7 @@ fn gen_ind_hlxy1(c: u8, r: AnalyzedOperand) -> CodeChunk {
     })
 }
 
-fn gen_ind_hlxy2(c1: u8, c2: u8, r: AnalyzedOperand) -> CodeChunk {
+fn gen2_ind_hlxy(c1: u8, c2: u8, r: AnalyzedOperand) -> CodeChunk {
     CodeChunk::new(match r {
         AnalyzedOperand::IndirectHL => vec![c1, c2],
         AnalyzedOperand::IndirectIX(o) => vec![0xdd, c1, o as u8, c2],
@@ -405,7 +405,7 @@ fn expect_two_operands(
 
 fn assemble_acc_operation(operands: Operands, op_base: u8) -> Result<CodeChunk, AssembleError> {
     match expect_single_operand(operands)? {
-        ii if is_ind_hlxy(&ii) => Ok(gen_ind_hlxy1(op_base + 0x06, ii)),
+        ii if is_ind_hlxy(&ii) => Ok(gen1_ind_hlxy(op_base + 0x06, ii)),
         AO::Immediate(n) => Ok(gen2(op_base + 0x46, n as u8)),
         r if is_reg8(&r) => Ok(gen1(reg8(op_base, r))),
         _ => Err(AssembleError::IllegalOperand),
@@ -415,7 +415,7 @@ fn assemble_acc_operation(operands: Operands, op_base: u8) -> Result<CodeChunk, 
 fn assemble_bit_operation(operands: Operands, op_base: u8) -> Result<CodeChunk, AssembleError> {
     match expect_two_operands(operands)? {
         (AO::Immediate(b), ii) if is_ind_hlxy(&ii) => {
-            Ok(gen_ind_hlxy2(0xcb, bit(op_base + 6, b)?, ii))
+            Ok(gen2_ind_hlxy(0xcb, bit(op_base + 6, b)?, ii))
         }
         (AO::Immediate(b), r) if is_reg8(&r) => Ok(gen2(0xcb, bit(reg8(op_base, r), b)?)),
         _ => Err(AssembleError::IllegalOperand),
@@ -432,6 +432,14 @@ fn assemble_push_pop(operands: Operands, op_base: u8) -> Result<CodeChunk, Assem
     }
 }
 
+fn assemble_shift_rotate(operands: Operands, op_base: u8) -> Result<CodeChunk, AssembleError> {
+    match expect_single_operand(operands)? {
+        ii if is_ind_hlxy(&ii) => Ok(gen2_ind_hlxy(0xcb, op_base + 0x06, ii)),
+        r if is_reg8(&r) => Ok(gen2(0xcb, reg8(op_base, r))),
+        _ => Err(AssembleError::IllegalOperand),
+    }
+}
+
 fn assemble_no_operand1(operands: Operands, c: u8) -> Result<CodeChunk, AssembleError> {
     expect_no_operand(operands)?;
     Ok(gen1(c))
@@ -444,7 +452,7 @@ fn assemble_no_operand2(operands: Operands, c1: u8, c2: u8) -> Result<CodeChunk,
 
 fn assemble_adc(operands: Operands) -> Result<CodeChunk, AssembleError> {
     match expect_two_operands(operands)? {
-        (AO::A, ii) if is_ind_hlxy(&ii) => Ok(gen_ind_hlxy1(0x8e, ii)),
+        (AO::A, ii) if is_ind_hlxy(&ii) => Ok(gen1_ind_hlxy(0x8e, ii)),
         (AO::A, r) if is_reg8(&r) => Ok(gen1(reg8(88, r))),
         (AO::A, AO::Immediate(n)) => Ok(gen2(0xce, n as u8)),
         (AO::HL, rr) if is_reg16(&rr) => Ok(gen2(0xed, reg16(0x4a, rr))),
@@ -454,7 +462,7 @@ fn assemble_adc(operands: Operands) -> Result<CodeChunk, AssembleError> {
 
 fn assemble_add(operands: Operands) -> Result<CodeChunk, AssembleError> {
     match expect_two_operands(operands)? {
-        (AO::A, ii) if is_ind_hlxy(&ii) => Ok(gen_ind_hlxy1(0x86, ii)),
+        (AO::A, ii) if is_ind_hlxy(&ii) => Ok(gen1_ind_hlxy(0x86, ii)),
         (AO::A, r) if is_reg8(&r) => Ok(gen1(reg8(80, r))),
         (AO::A, AO::Immediate(n)) => Ok(gen2(0xc6, n as u8)),
         (AO::HL, rr) if is_reg16(&rr) => Ok(gen1(reg16(0x09, rr))),
@@ -482,7 +490,7 @@ fn assemble_call(operands: Operands) -> Result<CodeChunk, AssembleError> {
 
 fn assemble_dec(operands: Operands) -> Result<CodeChunk, AssembleError> {
     match expect_single_operand(operands)? {
-        ii if is_ind_hlxy(&ii) => Ok(gen_ind_hlxy1(0x35, ii)),
+        ii if is_ind_hlxy(&ii) => Ok(gen1_ind_hlxy(0x35, ii)),
         r if is_reg8(&r) => Ok(gen1(reg8_3(0x05, r))),
         rr if is_reg16xy(&rr) => Ok(gen_reg16xy(0x0b, rr)),
         _ => Err(AssembleError::IllegalOperand),
@@ -525,7 +533,7 @@ fn assemble_in(operands: Operands) -> Result<CodeChunk, AssembleError> {
 
 fn assemble_inc(operands: Operands) -> Result<CodeChunk, AssembleError> {
     match expect_single_operand(operands)? {
-        ii if is_ind_hlxy(&ii) => Ok(gen_ind_hlxy1(0x34, ii)),
+        ii if is_ind_hlxy(&ii) => Ok(gen1_ind_hlxy(0x34, ii)),
         r if is_reg8(&r) => Ok(gen1(reg8_3(0x04, r))),
         rr if is_reg16xy(&rr) => Ok(gen_reg16xy(0x03, rr)),
         _ => Err(AssembleError::IllegalOperand),
@@ -559,12 +567,12 @@ fn assemble_ld(operands: Operands) -> Result<CodeChunk, AssembleError> {
     match expect_two_operands(operands)? {
         (AO::IndirectBC, AO::A) => Ok(gen1(0x02)),
         (AO::IndirectDE, AO::A) => Ok(gen1(0x12)),
-        (ii, AO::Immediate(n)) if is_ind_hlxy(&ii) => Ok(gen_ind_hlxy2(0x36, n as u8, ii)),
-        (ii, r) if is_ind_hlxy(&ii) && is_reg8(&r) => Ok(gen_ind_hlxy1(reg8(0x70, r), ii)),
+        (ii, AO::Immediate(n)) if is_ind_hlxy(&ii) => Ok(gen2_ind_hlxy(0x36, n as u8, ii)),
+        (ii, r) if is_ind_hlxy(&ii) && is_reg8(&r) => Ok(gen1_ind_hlxy(reg8(0x70, r), ii)),
         (AO::Indirect(nn), AO::A) => Ok(gen1_imm16(0x32, nn as u16)),
         (AO::A, AO::IndirectBC) => Ok(gen1(0x0a)),
         (AO::A, AO::IndirectDE) => Ok(gen1(0x1a)),
-        (r, ii) if is_reg8(&r) && is_ind_hlxy(&ii) => Ok(gen_ind_hlxy1(reg8_3(0x46, r), ii)),
+        (r, ii) if is_reg8(&r) && is_ind_hlxy(&ii) => Ok(gen1_ind_hlxy(reg8_3(0x46, r), ii)),
         (AO::A, AO::Indirect(nn)) => Ok(gen1_imm16(0x3a, nn as u16)),
         (r, AO::Immediate(n)) if is_reg8(&r) => Ok(gen2(reg8_3(0x06, r), n as u8)),
         (r1, r2) if is_reg8(&r1) && is_reg8(&r2) => Ok(gen1(reg8_3(reg8(0x40, r2), r1))),
@@ -651,6 +659,7 @@ fn assemble_machine_instruction(
         "ret" => assemble_ret(operands),
         "reti" => assemble_no_operand2(operands, 0xed, 0x4d),
         "retn" => assemble_no_operand2(operands, 0xed, 0x45),
+        "rl" => assemble_shift_rotate(operands, 0x10),
         _ => Ok(CodeChunk { code: vec![2] }),
     }
 }
