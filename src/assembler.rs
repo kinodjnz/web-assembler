@@ -171,7 +171,19 @@ fn is_reg16(rr: &AnalyzedOperand) -> bool {
     }
 }
 
-fn is_ind_hlx(r: &AnalyzedOperand) -> bool {
+fn is_reg16xy(rr: &AnalyzedOperand) -> bool {
+    match rr {
+        AnalyzedOperand::BC
+        | AnalyzedOperand::DE
+        | AnalyzedOperand::HL
+        | AnalyzedOperand::SP
+        | AnalyzedOperand::IX
+        | AnalyzedOperand::IY => true,
+        _ => false,
+    }
+}
+
+fn is_ind_hlxy(r: &AnalyzedOperand) -> bool {
     match r {
         AnalyzedOperand::IndirectHL
         | AnalyzedOperand::IndirectIX(_)
@@ -238,17 +250,37 @@ fn gen_ind_hlx2(c1: u8, c2: u8, r: AnalyzedOperand) -> CodeChunk {
     })
 }
 
-fn reg8(c: u8, r: AnalyzedOperand) -> u8 {
+fn gen_reg16xy(c: u8, rr: AnalyzedOperand) -> CodeChunk {
+    CodeChunk::new(match rr {
+        AnalyzedOperand::BC => vec![c],
+        AnalyzedOperand::DE => vec![c + 0x10],
+        AnalyzedOperand::HL => vec![c + 0x20],
+        AnalyzedOperand::SP => vec![c + 0x30],
+        AnalyzedOperand::IX => vec![0xdd, c + 0x20],
+        AnalyzedOperand::IY => vec![0xfd, c + 0x20],
+        _ => panic!("reg16xy expected"),
+    })
+}
+
+fn reg8_shift(c: u8, r: AnalyzedOperand, s: i32) -> u8 {
     match r {
-        AnalyzedOperand::A => c + 7,
+        AnalyzedOperand::A => c + (7 << s),
         AnalyzedOperand::B => c,
-        AnalyzedOperand::C => c + 1,
-        AnalyzedOperand::D => c + 2,
-        AnalyzedOperand::E => c + 3,
-        AnalyzedOperand::H => c + 4,
-        AnalyzedOperand::L => c + 5,
+        AnalyzedOperand::C => c + (1 << s),
+        AnalyzedOperand::D => c + (2 << s),
+        AnalyzedOperand::E => c + (3 << s),
+        AnalyzedOperand::H => c + (4 << s),
+        AnalyzedOperand::L => c + (5 << s),
         _ => panic!("reg8 expected"),
     }
+}
+
+fn reg8(c: u8, r: AnalyzedOperand) -> u8 {
+    reg8_shift(c, r, 0)
+}
+
+fn reg8_3(c: u8, r: AnalyzedOperand) -> u8 {
+    reg8_shift(c, r, 3)
 }
 
 fn reg16(c: u8, rr: AnalyzedOperand) -> u8 {
@@ -321,7 +353,7 @@ fn expect_two_operands(
 
 fn assemble_acc_operation(operands: Operands, op_base: u8) -> Result<CodeChunk, AssembleError> {
     match expect_single_operand(operands)? {
-        ii if is_ind_hlx(&ii) => Ok(gen_ind_hlx1(op_base + 0x06, ii)),
+        ii if is_ind_hlxy(&ii) => Ok(gen_ind_hlx1(op_base + 0x06, ii)),
         AO::Immediate(n) => Ok(gen2(op_base + 0x46, n as u8)),
         r if is_reg8(&r) => Ok(gen1(reg8(op_base, r))),
         _ => Err(AssembleError::IllegalOperand),
@@ -340,7 +372,7 @@ fn assemble_no_operand2(operands: Operands, c1: u8, c2: u8) -> Result<CodeChunk,
 
 fn assemble_adc(operands: Operands) -> Result<CodeChunk, AssembleError> {
     match expect_two_operands(operands)? {
-        (AO::A, ii) if is_ind_hlx(&ii) => Ok(gen_ind_hlx1(0x8e, ii)),
+        (AO::A, ii) if is_ind_hlxy(&ii) => Ok(gen_ind_hlx1(0x8e, ii)),
         (AO::A, r) if is_reg8(&r) => Ok(gen1(reg8(88, r))),
         (AO::A, AO::Immediate(n)) => Ok(gen2(0xce, n as u8)),
         (AO::HL, rr) if is_reg16(&rr) => Ok(gen2(0xed, reg16(0x4a, rr))),
@@ -350,7 +382,7 @@ fn assemble_adc(operands: Operands) -> Result<CodeChunk, AssembleError> {
 
 fn assemble_add(operands: Operands) -> Result<CodeChunk, AssembleError> {
     match expect_two_operands(operands)? {
-        (AO::A, ii) if is_ind_hlx(&ii) => Ok(gen_ind_hlx1(0x86, ii)),
+        (AO::A, ii) if is_ind_hlxy(&ii) => Ok(gen_ind_hlx1(0x86, ii)),
         (AO::A, r) if is_reg8(&r) => Ok(gen1(reg8(80, r))),
         (AO::A, AO::Immediate(n)) => Ok(gen2(0xc6, n as u8)),
         (AO::HL, rr) if is_reg16(&rr) => Ok(gen1(reg16(0x09, rr))),
@@ -368,7 +400,7 @@ fn assemble_add(operands: Operands) -> Result<CodeChunk, AssembleError> {
 
 fn assemble_bit(operands: Operands) -> Result<CodeChunk, AssembleError> {
     match expect_two_operands(operands)? {
-        (AO::Immediate(b), ii) if is_ind_hlx(&ii) => Ok(gen_ind_hlx2(0xcb, bit(0x46, b)?, ii)),
+        (AO::Immediate(b), ii) if is_ind_hlxy(&ii) => Ok(gen_ind_hlx2(0xcb, bit(0x46, b)?, ii)),
         (AO::Immediate(b), r) if is_reg8(&r) => Ok(gen2(0xcb, bit(reg8(0x40, r), b)?)),
         _ => Err(AssembleError::IllegalOperand),
     }
@@ -380,6 +412,15 @@ fn assemble_call(operands: Operands) -> Result<CodeChunk, AssembleError> {
         AnalyzedOperands::TwoOperands(c, AO::Immediate(n)) if is_cond(&c) => {
             Ok(gen1_imm16(cond(0xc4, c), n as u16))
         }
+        _ => Err(AssembleError::IllegalOperand),
+    }
+}
+
+fn assemble_dec(operands: Operands) -> Result<CodeChunk, AssembleError> {
+    match expect_single_operand(operands)? {
+        ii if is_ind_hlxy(&ii) => Ok(gen_ind_hlx1(0x35, ii)),
+        r if is_reg8(&r) => Ok(gen1(reg8_3(0x05, r))),
+        rr if is_reg16xy(&rr) => Ok(gen_reg16xy(0x0b, rr)),
         _ => Err(AssembleError::IllegalOperand),
     }
 }
@@ -402,6 +443,7 @@ fn assemble_machine_instruction(
         "cpir" => assemble_no_operand2(operands, 0xed, 0xb1),
         "cpl" => assemble_no_operand1(operands, 0x2f),
         "daa" => assemble_no_operand1(operands, 0x27),
+        "dec" => assemble_dec(operands),
         _ => Ok(CodeChunk { code: vec![2] }),
     }
 }
