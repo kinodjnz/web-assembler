@@ -620,6 +620,16 @@ fn assemble_rst(operands: Operands) -> Result<CodeChunk, AssembleError> {
     }
 }
 
+fn assemble_sbc(operands: Operands) -> Result<CodeChunk, AssembleError> {
+    match expect_two_operands(operands)? {
+        (AO::A, ii) if is_ind_hlxy(&ii) => Ok(gen1_ind_hlxy(0x9e, ii)),
+        (AO::A, r) if is_reg8(&r) => Ok(gen1(reg8(98, r))),
+        (AO::A, AO::Immediate(n)) => Ok(gen2(0xde, n as u8)),
+        (AO::HL, rr) if is_reg16(&rr) => Ok(gen2(0xed, reg16(0x42, rr))),
+        _ => Err(AssembleError::IllegalOperand),
+    }
+}
+
 fn assemble_machine_instruction(
     opcode: Opcode,
     operands: Operands,
@@ -684,6 +694,7 @@ fn assemble_machine_instruction(
         "rrca" => assemble_no_operand1(operands, 0x0f),
         "rrd" => assemble_no_operand2(operands, 0xed, 0x67),
         "rst" => assemble_rst(operands),
+        "sbc" => assemble_sbc(operands),
         _ => Ok(CodeChunk { code: vec![2] }),
     }
 }
