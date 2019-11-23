@@ -466,6 +466,15 @@ fn assemble_in(operands: Operands) -> Result<CodeChunk, AssembleError> {
     }
 }
 
+fn assemble_inc(operands: Operands) -> Result<CodeChunk, AssembleError> {
+    match expect_single_operand(operands)? {
+        ii if is_ind_hlxy(&ii) => Ok(gen_ind_hlx1(0x34, ii)),
+        r if is_reg8(&r) => Ok(gen1(reg8_3(0x04, r))),
+        rr if is_reg16xy(&rr) => Ok(gen_reg16xy(0x03, rr)),
+        _ => Err(AssembleError::IllegalOperand),
+    }
+}
+
 fn assemble_machine_instruction(
     opcode: Opcode,
     operands: Operands,
@@ -493,6 +502,7 @@ fn assemble_machine_instruction(
         "halt" => assemble_no_operand1(operands, 0x76),
         "im" => assemble_im(operands),
         "in" => assemble_in(operands),
+        "inc" => assemble_inc(operands),
         _ => Ok(CodeChunk { code: vec![2] }),
     }
 }
