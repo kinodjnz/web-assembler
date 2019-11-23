@@ -605,6 +605,10 @@ fn assemble_machine_instruction(
         "neg" => assemble_no_operand2(operands, 0xed, 0x44),
         "nop" => assemble_no_operand1(operands, 0x00),
         "or" => assemble_acc_operation(operands, 0xb0),
+        "otdr" => assemble_no_operand2(operands, 0xed, 0xbb),
+        "otir" => assemble_no_operand2(operands, 0xed, 0xb3),
+        "outd" => assemble_no_operand2(operands, 0xed, 0xab),
+        "outi" => assemble_no_operand2(operands, 0xed, 0xa3),
         _ => Ok(CodeChunk { code: vec![2] }),
     }
 }
