@@ -405,6 +405,26 @@ fn assemble_acc_operation(operands: Operands, op_base: u8) -> Result<CodeChunk, 
     }
 }
 
+fn assemble_bit_operation(operands: Operands, op_base: u8) -> Result<CodeChunk, AssembleError> {
+    match expect_two_operands(operands)? {
+        (AO::Immediate(b), ii) if is_ind_hlxy(&ii) => {
+            Ok(gen_ind_hlxy2(0xcb, bit(op_base + 6, b)?, ii))
+        }
+        (AO::Immediate(b), r) if is_reg8(&r) => Ok(gen2(0xcb, bit(reg8(op_base, r), b)?)),
+        _ => Err(AssembleError::IllegalOperand),
+    }
+}
+
+fn assemble_push_pop(operands: Operands, op_base: u8) -> Result<CodeChunk, AssembleError> {
+    match expect_single_operand(operands)? {
+        AO::BC => Ok(gen1(op_base)),
+        AO::DE => Ok(gen1(op_base + 0x10)),
+        AO::AF => Ok(gen1(op_base + 0x30)),
+        rr if is_hlxy(&rr) => Ok(gen_reg16xy(op_base, rr)),
+        _ => Err(AssembleError::IllegalOperand),
+    }
+}
+
 fn assemble_no_operand1(operands: Operands, c: u8) -> Result<CodeChunk, AssembleError> {
     expect_no_operand(operands)?;
     Ok(gen1(c))
@@ -439,14 +459,6 @@ fn assemble_add(operands: Operands) -> Result<CodeChunk, AssembleError> {
         (AO::IY, AO::DE) => Ok(gen2(0xfd, 0x19)),
         (AO::IY, AO::IY) => Ok(gen2(0xfd, 0x29)),
         (AO::IY, AO::SP) => Ok(gen2(0xfd, 0x39)),
-        _ => Err(AssembleError::IllegalOperand),
-    }
-}
-
-fn assemble_bit(operands: Operands) -> Result<CodeChunk, AssembleError> {
-    match expect_two_operands(operands)? {
-        (AO::Immediate(b), ii) if is_ind_hlxy(&ii) => Ok(gen_ind_hlxy2(0xcb, bit(0x46, b)?, ii)),
-        (AO::Immediate(b), r) if is_reg8(&r) => Ok(gen2(0xcb, bit(reg8(0x40, r), b)?)),
         _ => Err(AssembleError::IllegalOperand),
     }
 }
@@ -571,16 +583,6 @@ fn assemble_out(operands: Operands) -> Result<CodeChunk, AssembleError> {
     }
 }
 
-fn assemble_push_pop(operands: Operands, op_base: u8) -> Result<CodeChunk, AssembleError> {
-    match expect_single_operand(operands)? {
-        AO::BC => Ok(gen1(op_base)),
-        AO::DE => Ok(gen1(op_base + 0x10)),
-        AO::AF => Ok(gen1(op_base + 0x30)),
-        rr if is_hlxy(&rr) => Ok(gen_reg16xy(op_base, rr)),
-        _ => Err(AssembleError::IllegalOperand),
-    }
-}
-
 fn assemble_machine_instruction(
     opcode: Opcode,
     operands: Operands,
@@ -589,7 +591,7 @@ fn assemble_machine_instruction(
         "adc" => assemble_adc(operands),
         "add" => assemble_add(operands),
         "and" => assemble_acc_operation(operands, 0xa0),
-        "bit" => assemble_bit(operands),
+        "bit" => assemble_bit_operation(operands, 0x40),
         "call" => assemble_call(operands),
         "ccf" => assemble_no_operand1(operands, 0xcf),
         "cp" => assemble_acc_operation(operands, 0xb8),
@@ -630,6 +632,7 @@ fn assemble_machine_instruction(
         "outi" => assemble_no_operand2(operands, 0xed, 0xa3),
         "pop" => assemble_push_pop(operands, 0xc1),
         "push" => assemble_push_pop(operands, 0xc5),
+        "res" => assemble_bit_operation(operands, 0x80),
         _ => Ok(CodeChunk { code: vec![2] }),
     }
 }
