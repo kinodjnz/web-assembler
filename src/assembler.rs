@@ -448,6 +448,15 @@ fn assemble_ex(operands: Operands) -> Result<CodeChunk, AssembleError> {
     }
 }
 
+fn assemble_im(operands: Operands) -> Result<CodeChunk, AssembleError> {
+    match expect_single_operand(operands)? {
+        AO::Immediate(0) => Ok(gen2(0xed, 0x46)),
+        AO::Immediate(1) => Ok(gen2(0xed, 0x56)),
+        AO::Immediate(2) => Ok(gen2(0xed, 0x5e)),
+        _ => Err(AssembleError::IllegalOperand),
+    }
+}
+
 fn assemble_machine_instruction(
     opcode: Opcode,
     operands: Operands,
@@ -473,6 +482,7 @@ fn assemble_machine_instruction(
         "ex" => assemble_ex(operands),
         "exx" => assemble_no_operand1(operands, 0xd9),
         "halt" => assemble_no_operand1(operands, 0x76),
+        "im" => assemble_im(operands),
         _ => Ok(CodeChunk { code: vec![2] }),
     }
 }
