@@ -475,6 +475,19 @@ fn assemble_inc(operands: Operands) -> Result<CodeChunk, AssembleError> {
     }
 }
 
+fn assemble_jp(operands: Operands) -> Result<CodeChunk, AssembleError> {
+    match analyze_operands(operands)? {
+        AnalyzedOperands::SingleOperand(AO::Immediate(nn)) => Ok(gen1_imm16(0xc3, nn as u16)),
+        AnalyzedOperands::SingleOperand(AO::IndirectHL) => Ok(gen1(0xe9)),
+        AnalyzedOperands::SingleOperand(AO::IndirectIX0) => Ok(gen2(0xdd, 0xe9)),
+        AnalyzedOperands::SingleOperand(AO::IndirectIY0) => Ok(gen2(0xfd, 0xe9)),
+        AnalyzedOperands::TwoOperands(c, AO::Immediate(nn)) if is_cond(&c) => {
+            Ok(gen1_imm16(cond(0xc2, c), nn as u16))
+        }
+        _ => Err(AssembleError::IllegalOperand),
+    }
+}
+
 fn assemble_machine_instruction(
     opcode: Opcode,
     operands: Operands,
@@ -507,6 +520,7 @@ fn assemble_machine_instruction(
         "indr" => assemble_no_operand2(operands, 0xed, 0xba),
         "ini" => assemble_no_operand2(operands, 0xed, 0xa2),
         "inir" => assemble_no_operand2(operands, 0xed, 0xb2),
+        "jp" => assemble_jp(operands),
         _ => Ok(CodeChunk { code: vec![2] }),
     }
 }
