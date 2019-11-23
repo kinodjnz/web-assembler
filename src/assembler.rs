@@ -503,6 +503,10 @@ fn assemble_machine_instruction(
         "im" => assemble_im(operands),
         "in" => assemble_in(operands),
         "inc" => assemble_inc(operands),
+        "ind" => assemble_no_operand2(operands, 0xed, 0xaa),
+        "indr" => assemble_no_operand2(operands, 0xed, 0xba),
+        "ini" => assemble_no_operand2(operands, 0xed, 0xa2),
+        "inir" => assemble_no_operand2(operands, 0xed, 0xb2),
         _ => Ok(CodeChunk { code: vec![2] }),
     }
 }
