@@ -224,8 +224,8 @@ fn gen2(c1: u8, c2: u8) -> CodeChunk {
     CodeChunk::new(vec![c1, c2])
 }
 
-fn gen1_imm16(c: u8, n: u16) -> CodeChunk {
-    CodeChunk::new(vec![c, lower_byte(n), upper_byte(n)])
+fn gen1_imm16(c: u8, nn: u16) -> CodeChunk {
+    CodeChunk::new(vec![c, lower_byte(nn), upper_byte(nn)])
 }
 
 fn gen_ind_hlx1(c: u8, r: AnalyzedOperand) -> CodeChunk {
@@ -408,9 +408,9 @@ fn assemble_bit(operands: Operands) -> Result<CodeChunk, AssembleError> {
 
 fn assemble_call(operands: Operands) -> Result<CodeChunk, AssembleError> {
     match analyze_operands(operands)? {
-        AnalyzedOperands::SingleOperand(AO::Immediate(n)) => Ok(gen1_imm16(0xcd, n as u16)),
-        AnalyzedOperands::TwoOperands(c, AO::Immediate(n)) if is_cond(&c) => {
-            Ok(gen1_imm16(cond(0xc4, c), n as u16))
+        AnalyzedOperands::SingleOperand(AO::Immediate(nn)) => Ok(gen1_imm16(0xcd, nn as u16)),
+        AnalyzedOperands::TwoOperands(c, AO::Immediate(nn)) if is_cond(&c) => {
+            Ok(gen1_imm16(cond(0xc4, c), nn as u16))
         }
         _ => Err(AssembleError::IllegalOperand),
     }
@@ -421,6 +421,13 @@ fn assemble_dec(operands: Operands) -> Result<CodeChunk, AssembleError> {
         ii if is_ind_hlxy(&ii) => Ok(gen_ind_hlx1(0x35, ii)),
         r if is_reg8(&r) => Ok(gen1(reg8_3(0x05, r))),
         rr if is_reg16xy(&rr) => Ok(gen_reg16xy(0x0b, rr)),
+        _ => Err(AssembleError::IllegalOperand),
+    }
+}
+
+fn assemble_djnz(operands: Operands) -> Result<CodeChunk, AssembleError> {
+    match expect_single_operand(operands)? {
+        AO::Immediate(n) => Ok(gen2(0x10, n as u8)),
         _ => Err(AssembleError::IllegalOperand),
     }
 }
@@ -445,6 +452,7 @@ fn assemble_machine_instruction(
         "daa" => assemble_no_operand1(operands, 0x27),
         "dec" => assemble_dec(operands),
         "di" => assemble_no_operand1(operands, 0xf3),
+        "djnz" => assemble_djnz(operands),
         _ => Ok(CodeChunk { code: vec![2] }),
     }
 }
