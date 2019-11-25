@@ -1,4 +1,3 @@
-//use crate::lexer::Annot;
 use crate::parser::{
     Indirect, Instruction, NumberValue, Opcode, Operand, Operands, ParseError, Parser,
 };
@@ -6,7 +5,7 @@ use std::num::ParseIntError;
 
 #[derive(Debug)]
 pub struct CodeChunk {
-    code: Vec<u8>,
+    pub code: Vec<u8>,
 }
 
 impl CodeChunk {
@@ -19,6 +18,10 @@ impl CodeChunk {
             .iter()
             .map(|x| format!("{:02x} ", x))
             .collect::<String>()
+    }
+
+    pub fn len(&self) -> usize {
+        self.code.len()
     }
 }
 

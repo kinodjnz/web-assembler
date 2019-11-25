@@ -1,15 +1,35 @@
 use crate::assembler::parse_and_assemble;
 use crate::parser::Parser;
+use crate::emulator::Emulator;
 use yew::{html, Component, ComponentLink, Html, ShouldRender};
 
 pub struct Model {
     value: String,
     code: String,
+    step: String,
+    reg: String,
+    emulator: Emulator,
 }
 
 pub enum Msg {
     Assemble,
     TextChanged(String),
+}
+
+impl Model {
+    fn assemble_and_step(&mut self) -> Result<(), ()> {
+        let mut parser = Parser::new(self.value.chars());
+        let code = parse_and_assemble(&mut parser)
+            .map_err(|other| {
+                self.code = format!("{:?}", other);
+            })?;
+        self.emulator.load(&code, 0x0100);
+        self.code = code.to_hex();
+        let step = self.emulator.step();
+        self.step = format!("{:?}", step);
+        self.reg = self.emulator.show_reg();
+        Ok(())
+    }
 }
 
 impl Component for Model {
@@ -20,17 +40,16 @@ impl Component for Model {
         Model {
             value: String::new(),
             code: String::new(),
+            step: String::new(),
+            reg: String::new(),
+            emulator: Emulator::new(),
         }
     }
 
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
         match msg {
             Msg::Assemble => {
-                let mut parser = Parser::new(self.value.chars());
-                self.code = match parse_and_assemble(&mut parser) {
-                    Ok(code) => code.to_hex(),
-                    other => format!("{:?}", other),
-                };
+                self.assemble_and_step();
                 true
             }
             Msg::TextChanged(value) => {
@@ -54,6 +73,8 @@ impl Component for Model {
                     //<input value=self.value oninput=|e| Msg::TextChanged(e.value)></input>
                 </div>
                 <div><code>{self.code.clone()}</code></div>
+                <div><code>{self.step.clone()}</code></div>
+                <div><code>{self.reg.clone()}</code></div>
             </div>
         }
     }
