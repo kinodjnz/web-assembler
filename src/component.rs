@@ -1,6 +1,6 @@
 use crate::assembler::parse_and_assemble;
-use crate::parser::Parser;
 use crate::emulator::Emulator;
+use crate::parser::Parser;
 use yew::{html, Component, ComponentLink, Html, ShouldRender};
 
 pub struct Model {
@@ -19,10 +19,9 @@ pub enum Msg {
 impl Model {
     fn assemble_and_step(&mut self) -> Result<(), ()> {
         let mut parser = Parser::new(self.value.chars());
-        let code = parse_and_assemble(&mut parser)
-            .map_err(|other| {
-                self.code = format!("{:?}", other);
-            })?;
+        let code = parse_and_assemble(&mut parser).map_err(|other| {
+            self.code = format!("{:?}", other);
+        })?;
         self.emulator.load(&code, 0x0100);
         self.code = code.to_hex();
         let step = self.emulator.step();

@@ -3,7 +3,7 @@ use crate::assembler::CodeChunk;
 #[derive(Debug)]
 pub enum PVFlag {
     Overflow(u8), // bit 7
-    Parity(u8), // before parity calculation
+    Parity(u8),   // before parity calculation
 }
 
 impl Default for PVFlag {
@@ -48,9 +48,9 @@ impl NFlag {
 
 #[derive(Debug, Default)]
 pub struct Flag {
-    sz: u8, // bit 7, 6
+    sz: u8,  // bit 7, 6
     f53: u8, // bit 5, 3
-    h: u8, // bit 4
+    h: u8,   // bit 4
     pv: PVFlag,
     n: NFlag,
     cf: u8, // bit 0
@@ -58,7 +58,12 @@ pub struct Flag {
 
 impl Flag {
     fn as_u8(&self) -> u8 {
-        (self.sz & 0xc0) | (self.f53 & 0x28) | (self.h & 0x10) | (self.pv.as_bit() << 2) | (self.n.as_bit() << 1) | (self.cf & 0x01)
+        (self.sz & 0xc0)
+            | (self.f53 & 0x28)
+            | (self.h & 0x10)
+            | (self.pv.as_bit() << 2)
+            | (self.n.as_bit() << 1)
+            | (self.cf & 0x01)
     }
 }
 
@@ -182,7 +187,8 @@ impl Emulator {
                 self.reg.pc += 1;
                 Step::Run(4)
             }
-            op if op & 0xc7 == 0x06 => { // ld a,n
+            op if op & 0xc7 == 0x06 => {
+                // ld a,n
                 self.reg.pc += 1;
                 let n = self.mem_ref8(self.reg.pc);
                 self.reg.set_reg8((op >> 3) & 0x07, n);
@@ -192,14 +198,16 @@ impl Emulator {
             0x76 => Step::Halt,
             op if op & 0xf8 == 0x70 => Step::Halt, // TODO ld (hl),r
             op if op & 0xc7 == 0x46 => Step::Halt, // TODO ld r,(hl)
-            op if op & 0xc0 == 0x40 => { // ld r,r'
+            op if op & 0xc0 == 0x40 => {
+                // ld r,r'
                 let src = (op >> 3) & 0x07;
                 self.reg.set_reg8(op & 0x07, self.reg.reg8(src));
                 self.reg.pc += 1;
                 Step::Run(4)
             }
             0x86 => Step::Halt, // TODO add a,(hl)
-            op if op & 0xc0 == 0x80 => { // add a,r
+            op if op & 0xc0 == 0x80 => {
+                // add a,r
                 let opr = self.reg.reg8(op & 0x07);
                 let res = self.reg.a as u32 + opr as u32;
                 self.affect_flag_add8(self.reg.a, opr, res);
@@ -211,5 +219,3 @@ impl Emulator {
         }
     }
 }
-
-
