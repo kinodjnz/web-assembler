@@ -102,6 +102,19 @@ impl Register {
             i => panic!("unknown register: {}", i),
         }
     }
+
+    fn set_reg8(&mut self, index: u8, value: u8) {
+        match index {
+            0 => self.bc = (self.bc & 0x00ff) | ((value as u16) << 8),
+            1 => self.bc = (self.bc & 0xff00) | value as u16,
+            2 => self.de = (self.de & 0x00ff) | ((value as u16) << 8),
+            3 => self.de = (self.de & 0xff00) | value as u16,
+            4 => self.hl = (self.hl & 0x00ff) | ((value as u16) << 8),
+            5 => self.hl = (self.hl & 0xff00) | value as u16,
+            7 => self.a = value,
+            i => panic!("unknown register: {}", i),
+        };
+    }
 }
 
 #[derive(Debug)]
@@ -139,6 +152,10 @@ impl Emulator {
         format!("{:?}", self.reg)
     }
 
+    pub fn mem_ref8(&self, addr: u16) -> u8 {
+        self.mem[addr as usize]
+    }
+
     fn affect_flag_add8(&mut self, opr1: u8, opr2: u8, res: u32) {
         let resl = res as u8;
         self.reg.f.cf = (res >> 8) as u8;
@@ -160,8 +177,24 @@ impl Emulator {
     // }
 
     pub fn step(&mut self) -> Step {
-        match self.mem[self.reg.pc as usize] {
+        match self.mem_ref8(self.reg.pc) {
             0x00 => {
+                self.reg.pc += 1;
+                Step::Run(4)
+            }
+            op if op & 0xc7 == 0x06 => { // ld a,n
+                self.reg.pc += 1;
+                let n = self.mem_ref8(self.reg.pc);
+                self.reg.set_reg8((op >> 3) & 0x07, n);
+                self.reg.pc += 1;
+                Step::Run(7)
+            }
+            0x76 => Step::Halt,
+            op if op & 0xf8 == 0x70 => Step::Halt, // TODO ld (hl),r
+            op if op & 0xc7 == 0x46 => Step::Halt, // TODO ld r,(hl)
+            op if op & 0xc0 == 0x40 => { // ld r,r'
+                let src = (op >> 3) & 0x07;
+                self.reg.set_reg8(op & 0x07, self.reg.reg8(src));
                 self.reg.pc += 1;
                 Step::Run(4)
             }
@@ -174,7 +207,6 @@ impl Emulator {
                 self.reg.pc += 1;
                 Step::Run(4)
             }
-            0x76 => Step::Halt,
             _ => Step::IllegalInstruction,
         }
     }

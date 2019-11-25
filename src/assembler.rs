@@ -473,7 +473,7 @@ fn assemble_adc(operands: Operands) -> Result<CodeChunk, AssembleError> {
 fn assemble_add(operands: Operands) -> Result<CodeChunk, AssembleError> {
     match expect_two_operands(operands)? {
         (AO::A, ii) if is_ind_hlxy(&ii) => Ok(gen1_ind_hlxy(0x86, ii)),
-        (AO::A, r) if is_reg8(&r) => Ok(gen1(reg8(80, r))),
+        (AO::A, r) if is_reg8(&r) => Ok(gen1(reg8(0x80, r))),
         (AO::A, AO::Immediate(n)) => Ok(gen2(0xc6, n as u8)),
         (AO::HL, rr) if is_reg16(&rr) => Ok(gen1(reg16(0x09, rr))),
         (AO::IX, AO::BC) => Ok(gen2(0xdd, 0x09)),
