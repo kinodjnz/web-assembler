@@ -87,6 +87,10 @@ pub struct Register {
 }
 
 impl Register {
+    fn reset(&mut self) {
+        *self = Self::default();
+    }
+
     fn high(rr: u16) -> u8 {
         (rr >> 8) as u8
     }
@@ -143,10 +147,16 @@ impl Emulator {
             mem: Vec::with_capacity(Self::MEM_SIZE),
             reg: Default::default(),
         };
-        e.mem.resize(Self::MEM_SIZE, 0x00);
-        e.reg.pc = 0x0100;
-        e.reg.sp = 0xfffe;
+        e.reset();
         e
+    }
+
+    pub fn reset(&mut self) {
+        self.mem.clear();
+        self.mem.resize(Self::MEM_SIZE, 0x00);
+        self.reg.reset();
+        self.reg.pc = 0x0100;
+        self.reg.sp = 0xfffe;
     }
 
     pub fn load(&mut self, code: &CodeChunk, addr: usize) {
@@ -200,19 +210,19 @@ impl Emulator {
             op if op & 0xc7 == 0x46 => Step::Halt, // TODO ld r,(hl)
             op if op & 0xc0 == 0x40 => {
                 // ld r,r'
+                self.reg.pc += 1;
                 let src = (op >> 3) & 0x07;
                 self.reg.set_reg8(op & 0x07, self.reg.reg8(src));
-                self.reg.pc += 1;
                 Step::Run(4)
             }
             0x86 => Step::Halt, // TODO add a,(hl)
             op if op & 0xc0 == 0x80 => {
                 // add a,r
+                self.reg.pc += 1;
                 let opr = self.reg.reg8(op & 0x07);
                 let res = self.reg.a as u32 + opr as u32;
                 self.affect_flag_add8(self.reg.a, opr, res);
                 self.reg.a = res as u8;
-                self.reg.pc += 1;
                 Step::Run(4)
             }
             _ => Step::IllegalInstruction,
