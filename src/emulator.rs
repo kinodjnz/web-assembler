@@ -99,15 +99,49 @@ impl Register {
         rr as u8
     }
 
+    fn b(&self) -> u8 {
+        Self::high(self.bc)
+    }
+
+    fn c(&self) -> u8 {
+        Self::low(self.bc)
+    }
+
+    fn d(&self) -> u8 {
+        Self::high(self.de)
+    }
+
+    fn e(&self) -> u8 {
+        Self::low(self.de)
+    }
+
+    fn h(&self) -> u8 {
+        Self::high(self.hl)
+    }
+
+    fn l(&self) -> u8 {
+        Self::low(self.hl)
+    }
+
     fn reg8(&self, index: u8) -> u8 {
         match index {
-            0 => Self::high(self.bc),
-            1 => Self::low(self.bc),
-            2 => Self::high(self.de),
-            3 => Self::low(self.de),
-            4 => Self::high(self.hl),
-            5 => Self::low(self.hl),
+            0 => self.b(),
+            1 => self.c(),
+            2 => self.d(),
+            3 => self.e(),
+            4 => self.h(),
+            5 => self.l(),
             7 => self.a,
+            i => panic!("unknown register: {}", i),
+        }
+    }
+
+    fn reg16(&self, index: u8) -> u16 {
+        match index {
+            0 => self.bc,
+            1 => self.de,
+            2 => self.hl,
+            3 => self.sp,
             i => panic!("unknown register: {}", i),
         }
     }
@@ -121,6 +155,16 @@ impl Register {
             4 => self.hl = (self.hl & 0x00ff) | ((value as u16) << 8),
             5 => self.hl = (self.hl & 0xff00) | value as u16,
             7 => self.a = value,
+            i => panic!("unknown register: {}", i),
+        };
+    }
+
+    fn set_reg16(&mut self, index: u8, value: u16) {
+        match index {
+            0 => self.bc = value,
+            1 => self.de = value,
+            2 => self.hl = value,
+            3 => self.sp = value,
             i => panic!("unknown register: {}", i),
         };
     }
@@ -171,6 +215,19 @@ impl Emulator {
         self.mem[addr as usize]
     }
 
+    pub fn mem_ref16(&self, addr: u16) -> u16 {
+        self.mem_ref8(addr) as u16 | ((self.mem_ref8(addr + 1) as u16) << 8)
+    }
+
+    pub fn mem_store8(&mut self, addr: u16, value: u8) {
+        self.mem[addr as usize] = value;
+    }
+
+    pub fn mem_store16(&mut self, addr: u16, value: u16) {
+        self.mem_store8(addr, value as u8);
+        self.mem_store8(addr + 1, (value >> 8) as u8);
+    }
+
     fn affect_flag_add8(&mut self, opr1: u8, opr2: u8, res: u32) {
         let resl = res as u8;
         self.reg.f.cf = (res >> 8) as u8;
@@ -194,7 +251,42 @@ impl Emulator {
     pub fn step(&mut self) -> Step {
         match self.mem_ref8(self.reg.pc) {
             0x00 => {
+                // nop
                 self.reg.pc += 1;
+                Step::Run(4)
+            }
+            op if op & 0xcf == 0x01 => {
+                // ld rr,nn
+                self.reg.pc += 1;
+                let nn = self.mem_ref16(self.reg.pc);
+                self.reg.pc += 2;
+                self.reg.set_reg16((op >> 4) & 0x03, nn);
+                Step::Run(10)
+            }
+            0x02 => {
+                // ld (bc),a
+                self.reg.pc += 1;
+                self.mem_store8(self.reg.bc, self.reg.a);
+                Step::Run(7)
+            }
+            op if op & 0xcf == 0x03 => {
+                // inc rr
+                self.reg.pc += 1;
+                let index = (op >> 4) & 0x03;
+                self.reg.set_reg16(index, self.reg.reg16(index) + 1);
+                Step::Run(6)
+            }
+            0x34 => {
+                // inc (hl)
+                self.reg.pc += 1;
+                self.mem_store8(self.reg.hl, self.mem_ref8(self.reg.hl) + 1);
+                Step::Run(11)
+            }
+            op if op & 0xc7 == 0x04 => {
+                // inc r
+                self.reg.pc += 1;
+                let index = (op >> 3) & 0x07;
+                self.reg.set_reg8(index, self.reg.reg8(index) + 1);
                 Step::Run(4)
             }
             op if op & 0xc7 == 0x06 => {
