@@ -229,24 +229,23 @@ impl Emulator {
     }
 
     fn affect_flag_add8(&mut self, opr1: u8, opr2: u8, res: u32) {
+        self.reg.f.cf = self.affect_flag_add_sub8(opr1, opr2, res, NFlag::Add);
+    }
+
+    fn affect_flag_inc8(&mut self, opr: u8, res: u32) {
+        self.affect_flag_add_sub8(opr, 1, res, NFlag::Add);
+    }
+
+    fn affect_flag_add_sub8(&mut self, opr1: u8, opr2: u8, res: u32, n: NFlag) -> u8 {
         let resl = res as u8;
-        self.reg.f.cf = (res >> 8) as u8;
+        let cf = (res >> 8) as u8;
         self.reg.f.sz = resl;
         self.reg.f.f53 = resl;
         self.reg.f.h = opr1 ^ opr2 ^ resl;
-        self.reg.f.pv = PVFlag::Overflow(self.reg.f.h ^ (self.reg.f.cf << 7));
-        self.reg.f.n = NFlag::Add;
+        self.reg.f.pv = PVFlag::Overflow(self.reg.f.h ^ (cf << 7));
+        self.reg.f.n = n;
+        cf
     }
-
-    // fn affect_flag_sub8(&mut self, opr1: u8, opr2: u8, res: u32) {
-    //     let resl = res as u8;
-    //     self.reg.f.cf = (res >> 8) as u8;
-    //     self.reg.f.sz = resl;
-    //     self.reg.f.f53 = resl;
-    //     self.reg.f.h = opr1 ^ opr2 ^ resl;
-    //     self.reg.f.pv = PVFlag::Overflow(self.f.h ^ (self.f.cf << 7));
-    //     self.reg.f.n = NFlag::Sub;
-    // }
 
     pub fn step(&mut self) -> Step {
         match self.mem_ref8(self.reg.pc) {
@@ -286,7 +285,10 @@ impl Emulator {
                 // inc r
                 self.reg.pc += 1;
                 let index = (op >> 3) & 0x07;
-                self.reg.set_reg8(index, self.reg.reg8(index) + 1);
+                let opr = self.reg.reg8(index);
+                let res = opr as u32 + 1;
+                self.affect_flag_inc8(opr, res);
+                self.reg.set_reg8(index, res as u8);
                 Step::Run(4)
             }
             op if op & 0xc7 == 0x06 => {
