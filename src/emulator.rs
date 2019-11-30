@@ -16,11 +16,7 @@ impl PVFlag {
     fn as_bit(&self) -> u8 {
         match self {
             PVFlag::Overflow(x) => (x >> 7) & 0x01u8,
-            PVFlag::Parity(x) => {
-                let x = x ^ (x >> 4);
-                let x = x ^ (x >> 2);
-                x ^ (x >> 1)
-            }
+            PVFlag::Parity(x) => x.count_ones() as u8 & 0x01u8,
         }
     }
 }
@@ -168,6 +164,10 @@ impl Register {
             i => panic!("unknown register: {}", i),
         };
     }
+
+    fn add_pc(&mut self, i: u16) {
+        self.pc = self.pc.wrapping_add(i);
+    }
 }
 
 #[derive(Debug)]
@@ -236,6 +236,10 @@ impl Emulator {
         self.affect_flag_add_sub8(opr, 1, res, NFlag::Add);
     }
 
+    fn affect_flag_dec8(&mut self, opr: u8, res: u32) {
+        self.affect_flag_add_sub8(opr, 1, res, NFlag::Sub);
+    }
+
     fn affect_flag_add_sub8(&mut self, opr1: u8, opr2: u8, res: u32, n: NFlag) -> u8 {
         let resl = res as u8;
         let cf = (res >> 8) as u8;
@@ -247,43 +251,54 @@ impl Emulator {
         cf
     }
 
+    fn affect_flag_rotate_a(&mut self, res: u8, cf: u8) {
+        self.reg.f.cf = cf;
+        self.reg.f.pv = PVFlag::Parity(res);
+        self.reg.f.n = NFlag::Add;
+        self.reg.f.h = 0;
+        self.reg.f.f53 = res;
+    }
+
     pub fn step(&mut self) -> Step {
         match self.mem_ref8(self.reg.pc) {
             0x00 => {
                 // nop
-                self.reg.pc += 1;
+                self.reg.add_pc(1);
                 Step::Run(4)
             }
             op if op & 0xcf == 0x01 => {
                 // ld rr,nn
-                self.reg.pc += 1;
+                self.reg.add_pc(1);
                 let nn = self.mem_ref16(self.reg.pc);
-                self.reg.pc += 2;
+                self.reg.add_pc(2);
                 self.reg.set_reg16((op >> 4) & 0x03, nn);
                 Step::Run(10)
             }
             0x02 => {
                 // ld (bc),a
-                self.reg.pc += 1;
+                self.reg.add_pc(1);
                 self.mem_store8(self.reg.bc, self.reg.a);
                 Step::Run(7)
             }
             op if op & 0xcf == 0x03 => {
                 // inc rr
-                self.reg.pc += 1;
+                self.reg.add_pc(1);
                 let index = (op >> 4) & 0x03;
-                self.reg.set_reg16(index, self.reg.reg16(index) + 1);
+                self.reg.set_reg16(index, self.reg.reg16(index).wrapping_add(1));
                 Step::Run(6)
             }
             0x34 => {
                 // inc (hl)
-                self.reg.pc += 1;
-                self.mem_store8(self.reg.hl, self.mem_ref8(self.reg.hl) + 1);
+                self.reg.add_pc(1);
+                let opr = self.mem_ref8(self.reg.hl);
+                let res = opr as u32 + 1;
+                self.affect_flag_inc8(opr, res);
+                self.mem_store8(self.reg.hl, res as u8);
                 Step::Run(11)
             }
             op if op & 0xc7 == 0x04 => {
                 // inc r
-                self.reg.pc += 1;
+                self.reg.add_pc(1);
                 let index = (op >> 3) & 0x07;
                 let opr = self.reg.reg8(index);
                 let res = opr as u32 + 1;
@@ -291,20 +306,55 @@ impl Emulator {
                 self.reg.set_reg8(index, res as u8);
                 Step::Run(4)
             }
+            0x35 => {
+                // dec (hl)
+                self.reg.add_pc(1);
+                let opr = self.mem_ref8(self.reg.hl);
+                let res = (opr as u32).wrapping_sub(1);
+                self.affect_flag_dec8(opr, res);
+                self.mem_store8(self.reg.hl, res as u8);
+                Step::Run(11)
+            }
+            op if op & 0xc7 == 0x05 => {
+                // dec r
+                self.reg.add_pc(1);
+                let index = (op >> 3) & 0x07;
+                let opr = self.reg.reg8(index);
+                let res = (opr as u32).wrapping_sub(1);
+                self.affect_flag_dec8(opr, res);
+                self.reg.set_reg8(index, res as u8);
+                Step::Run(4)
+            }
             op if op & 0xc7 == 0x06 => {
                 // ld a,n
-                self.reg.pc += 1;
+                self.reg.add_pc(1);
                 let n = self.mem_ref8(self.reg.pc);
                 self.reg.set_reg8((op >> 3) & 0x07, n);
-                self.reg.pc += 1;
+                self.reg.add_pc(1);
                 Step::Run(7)
+            }
+            0x07 => {
+                // rlca
+                self.reg.add_pc(1);
+                let res = (self.reg.a << 1) | (self.reg.a >> 7);
+                self.affect_flag_rotate_a(res, self.reg.a >> 7);
+                self.reg.a = res;
+                Step::Run(4)
+            }
+            0x17 => {
+                // rla
+                self.reg.add_pc(1);
+                let res = (self.reg.a << 1) | (self.reg.f.cf & 0x01);
+                self.affect_flag_rotate_a(res, self.reg.a >> 7);
+                self.reg.a = res;
+                Step::Run(4)
             }
             0x76 => Step::Halt,
             op if op & 0xf8 == 0x70 => Step::Halt, // TODO ld (hl),r
             op if op & 0xc7 == 0x46 => Step::Halt, // TODO ld r,(hl)
             op if op & 0xc0 == 0x40 => {
                 // ld r,r'
-                self.reg.pc += 1;
+                self.reg.add_pc(1);
                 let src = (op >> 3) & 0x07;
                 self.reg.set_reg8(op & 0x07, self.reg.reg8(src));
                 Step::Run(4)
@@ -312,7 +362,7 @@ impl Emulator {
             0x86 => Step::Halt, // TODO add a,(hl)
             op if op & 0xc0 == 0x80 => {
                 // add a,r
-                self.reg.pc += 1;
+                self.reg.add_pc(1);
                 let opr = self.reg.reg8(op & 0x07);
                 let res = self.reg.a as u32 + opr as u32;
                 self.affect_flag_add8(self.reg.a, opr, res);
