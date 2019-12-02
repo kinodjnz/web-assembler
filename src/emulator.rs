@@ -43,7 +43,7 @@ impl PVFlag {
     fn as_bit(&self) -> u8 {
         match self {
             PVFlag::Overflow(x) => (x >> 7) & 0x01u8,
-            PVFlag::Parity(x) => x.count_ones() as u8 & 0x01u8,
+            PVFlag::Parity(x) => (x.count_ones() + 1) as u8 & 0x01u8,
         }
     }
 }
@@ -108,6 +108,20 @@ impl Flag {
 
     fn c_bit(&self) -> u8 {
         self.f & Flag::C_MASK
+    }
+
+    fn cond(&self, index: u8) -> bool {
+        match index {
+            0 => self.zf.as_bit(self.f) & Flag::Z_MASK == 0,
+            1 => self.zf.as_bit(self.f) & Flag::Z_MASK != 0,
+            2 => self.f & Flag::C_MASK == 0,
+            3 => self.f & Flag::C_MASK != 0,
+            4 => self.pv.as_bit() == 0,
+            5 => self.pv.as_bit() != 0,
+            6 => self.f & Flag::S_MASK == 0,
+            7 => self.f & Flag::S_MASK != 0,
+            i => panic!("unknown condition: {}", i),
+        }
     }
 }
 
@@ -542,6 +556,18 @@ impl Emulator {
                 self.affect_flag_rotate_a(res, self.reg.a);
                 self.reg.a = res;
                 Step::Run(4)
+            }
+            op if op & 0xe7 == 0x20 => {
+                // jr cond,o
+                self.reg.add_pc(1);
+                let o = self.mem_ref8(self.reg.pc);
+                self.reg.add_pc(1);
+                if self.reg.f.cond((op >> 3) & 3) {
+                    self.reg.add8_pc(o);
+                    Step::Run(12)
+                } else {
+                    Step::Run(7)
+                }
             }
             0x76 => Step::Halt,
             op if op & 0xf8 == 0x70 => Step::Halt, // TODO ld (hl),r
