@@ -494,7 +494,7 @@ impl Emulator {
                 Step::Run(4)
             }
             0x10 => {
-                // djnz
+                // djnz o
                 self.reg.add_pc(1);
                 let o = self.mem_ref8(self.reg.pc);
                 self.reg.add_pc(1);
@@ -507,11 +507,33 @@ impl Emulator {
                     Step::Run(13)
                 }
             }
+            0x12 => {
+                // ld (de),a
+                self.reg.add_pc(1);
+                self.mem_store8(self.reg.de, self.reg.a);
+                Step::Run(7)
+            }
             0x17 => {
                 // rla
                 self.reg.add_pc(1);
                 let res = (self.reg.a << 1) | self.reg.f.c_bit();
                 self.affect_flag_rotate_a(res, self.reg.a >> 7);
+                self.reg.a = res;
+                Step::Run(4)
+            }
+            0x18 => {
+                // jr o
+                self.reg.add_pc(1);
+                let o = self.mem_ref8(self.reg.pc);
+                self.reg.add_pc(1);
+                self.reg.add8_pc(o);
+                Step::Run(12)
+            }
+            0x1f => {
+                // rra
+                self.reg.add_pc(1);
+                let res = (self.reg.a >> 1) | (self.reg.f.c_bit() << 7);
+                self.affect_flag_rotate_a(res, self.reg.a);
                 self.reg.a = res;
                 Step::Run(4)
             }
