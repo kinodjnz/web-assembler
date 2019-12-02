@@ -529,6 +529,12 @@ impl Emulator {
                 self.reg.add8_pc(o);
                 Step::Run(12)
             }
+            0x1a => {
+                // ld a,(de)
+                self.reg.add_pc(1);
+                self.reg.a = self.mem_ref8(self.reg.de);
+                Step::Run(7)
+            }
             0x1f => {
                 // rra
                 self.reg.add_pc(1);
