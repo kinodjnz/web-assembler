@@ -124,7 +124,7 @@ impl<I: Iterator<Item = char>> Lexer<I> {
         let mut keyword = c.to_string();
         loop {
             match self.peek() {
-                Some(c) if matches!(c, '0'..='9' | 'A'..='Z' | 'a'..='z' | '_') => {
+                Some(c) if matches!(c, '0'..='9' | 'A'..='Z' | 'a'..='z' | '_' | '\x27') => {
                     self.next();
                     self.loc.proceed(c);
                     keyword.push(c);

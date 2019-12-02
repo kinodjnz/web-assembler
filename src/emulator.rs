@@ -407,6 +407,7 @@ impl Emulator {
             }
             0x08 => {
                 // ex af,af'
+                self.reg.add_pc(1);
                 let a = self.reg.a;
                 let f = self.reg.f.as_u8();
                 self.reg.a = self.reg.af_p.high();

@@ -118,7 +118,7 @@ fn analyze_operand(operand: Operand) -> Result<AnalyzedOperand, AssembleError> {
             "sp" => Ok(AnalyzedOperand::SP),
             "ix" => Ok(AnalyzedOperand::IX),
             "iy" => Ok(AnalyzedOperand::IY),
-            // AF'
+            "af'" => Ok(AnalyzedOperand::AFPrime),
             "nc" => Ok(AnalyzedOperand::NC),
             "z" => Ok(AnalyzedOperand::Z),
             "nz" => Ok(AnalyzedOperand::NZ),
