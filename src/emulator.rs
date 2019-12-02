@@ -1,6 +1,33 @@
 use crate::assembler::CodeChunk;
 
 #[derive(Debug)]
+pub enum ZFlag {
+    Acc(u8),
+    Bit,
+}
+
+impl Default for ZFlag {
+    fn default() -> ZFlag {
+        ZFlag::Bit
+    }
+}
+
+impl ZFlag {
+    fn as_bit(&self, f: u8) -> u8 {
+        match self {
+            ZFlag::Acc(x) => {
+                if *x == 0 {
+                    f | 0x40u8
+                } else {
+                    f & !0x40u8
+                }
+            }
+            ZFlag::Bit => f,
+        }
+    }
+}
+
+#[derive(Debug)]
 pub enum PVFlag {
     Overflow(u8), // bit 7
     Parity(u8),   // before parity calculation
@@ -36,30 +63,51 @@ impl Default for NFlag {
 impl NFlag {
     fn as_bit(&self) -> u8 {
         match self {
-            NFlag::Add => 0,
-            NFlag::Sub => 1,
+            NFlag::Add => 0x00u8,
+            NFlag::Sub => 0x02u8,
         }
     }
 }
 
 #[derive(Debug, Default)]
 pub struct Flag {
-    sz: u8,  // bit 7, 6
-    f53: u8, // bit 5, 3
-    h: u8,   // bit 4
+    f: u8, // bit 7,(6),5,4,3,1,0
+    zf: ZFlag,
     pv: PVFlag,
-    n: NFlag,
-    cf: u8, // bit 0
 }
 
 impl Flag {
+    const S_MASK: u8 = 0x80u8;
+    const Z_MASK: u8 = 0x40u8;
+    const F5_MASK: u8 = 0x20u8;
+    const H_MASK: u8 = 0x10u8;
+    const F3_MASK: u8 = 0x08u8;
+    const PV_MASK: u8 = 0x04u8;
+    const N_MASK: u8 = 0x02u8;
+    const C_MASK: u8 = 0x01u8;
+    const F53_MASK: u8 = Flag::F5_MASK | Flag::F3_MASK;
+
+    fn set_wo_z(&mut self, mask: u8, value: u8) {
+        self.f = (self.f & !mask) | (value & mask);
+    }
+
+    fn set_w_z(&mut self, mask: u8, value: u8) {
+        self.zf = ZFlag::Bit;
+        self.f = (self.f & !mask) | (value & mask);
+    }
+
     fn as_u8(&self) -> u8 {
-        (self.sz & 0xc0)
-            | (self.f53 & 0x28)
-            | (self.h & 0x10)
-            | (self.pv.as_bit() << 2)
-            | (self.n.as_bit() << 1)
-            | (self.cf & 0x01)
+        self.zf.as_bit(self.f) | (self.pv.as_bit() << 2)
+    }
+
+    fn from_u8(&mut self, x: u8) {
+        self.zf = ZFlag::Bit;
+        self.f = x;
+        self.pv = PVFlag::Overflow(x << 5);
+    }
+
+    fn c_bit(&self) -> u8 {
+        self.f & Flag::C_MASK
     }
 }
 
@@ -82,41 +130,53 @@ pub struct Register {
     hl_p: u16,
 }
 
+trait R16 {
+    fn from_pair(h: u8, l: u8) -> Self;
+    fn high(&self) -> u8;
+    fn low(&self) -> u8;
+}
+
+impl R16 for u16 {
+    fn from_pair(h: u8, l: u8) -> Self {
+        (h as u16) << 8 | l as u16
+    }
+
+    fn high(&self) -> u8 {
+        (*self >> 8) as u8
+    }
+
+    fn low(&self) -> u8 {
+        *self as u8
+    }
+}
+
 impl Register {
     fn reset(&mut self) {
         *self = Self::default();
     }
 
-    fn high(rr: u16) -> u8 {
-        (rr >> 8) as u8
-    }
-
-    fn low(rr: u16) -> u8 {
-        rr as u8
-    }
-
     fn b(&self) -> u8 {
-        Self::high(self.bc)
+        self.bc.high()
     }
 
     fn c(&self) -> u8 {
-        Self::low(self.bc)
+        self.bc.low()
     }
 
     fn d(&self) -> u8 {
-        Self::high(self.de)
+        self.de.high()
     }
 
     fn e(&self) -> u8 {
-        Self::low(self.de)
+        self.de.low()
     }
 
     fn h(&self) -> u8 {
-        Self::high(self.hl)
+        self.hl.high()
     }
 
     fn l(&self) -> u8 {
-        Self::low(self.hl)
+        self.hl.low()
     }
 
     fn reg8(&self, index: u8) -> u8 {
@@ -229,7 +289,8 @@ impl Emulator {
     }
 
     fn affect_flag_add8(&mut self, opr1: u8, opr2: u8, res: u32) {
-        self.reg.f.cf = self.affect_flag_add_sub8(opr1, opr2, res, NFlag::Add);
+        let cf = self.affect_flag_add_sub8(opr1, opr2, res, NFlag::Add);
+        self.reg.f.set_wo_z(Flag::C_MASK, cf);
     }
 
     fn affect_flag_inc8(&mut self, opr: u8, res: u32) {
@@ -243,20 +304,22 @@ impl Emulator {
     fn affect_flag_add_sub8(&mut self, opr1: u8, opr2: u8, res: u32, n: NFlag) -> u8 {
         let resl = res as u8;
         let cf = (res >> 8) as u8;
-        self.reg.f.sz = resl;
-        self.reg.f.f53 = resl;
-        self.reg.f.h = opr1 ^ opr2 ^ resl;
-        self.reg.f.pv = PVFlag::Overflow(self.reg.f.h ^ (cf << 7));
-        self.reg.f.n = n;
+        let h = opr1 ^ opr2 ^ resl;
+        self.reg.f.set_wo_z(Flag::S_MASK | Flag::F53_MASK, resl);
+        self.reg.f.set_wo_z(Flag::H_MASK, h);
+        self.reg.f.set_wo_z(Flag::N_MASK, n.as_bit());
+        self.reg.f.zf = ZFlag::Acc(resl);
+        self.reg.f.pv = PVFlag::Overflow(h ^ (cf << 7));
         cf
     }
 
     fn affect_flag_rotate_a(&mut self, res: u8, cf: u8) {
-        self.reg.f.cf = cf;
+        self.reg.f.set_wo_z(Flag::F53_MASK, res);
+        self.reg.f.set_wo_z(
+            Flag::H_MASK | Flag::N_MASK | Flag::C_MASK,
+            cf & Flag::C_MASK,
+        );
         self.reg.f.pv = PVFlag::Parity(res);
-        self.reg.f.n = NFlag::Add;
-        self.reg.f.h = 0;
-        self.reg.f.f53 = res;
     }
 
     pub fn step(&mut self) -> Step {
@@ -284,7 +347,8 @@ impl Emulator {
                 // inc rr
                 self.reg.add_pc(1);
                 let index = (op >> 4) & 0x03;
-                self.reg.set_reg16(index, self.reg.reg16(index).wrapping_add(1));
+                self.reg
+                    .set_reg16(index, self.reg.reg16(index).wrapping_add(1));
                 Step::Run(6)
             }
             0x34 => {
@@ -341,10 +405,19 @@ impl Emulator {
                 self.reg.a = res;
                 Step::Run(4)
             }
+            0x08 => {
+                // ex af,af'
+                let a = self.reg.a;
+                let f = self.reg.f.as_u8();
+                self.reg.a = self.reg.af_p.high();
+                self.reg.f.from_u8(self.reg.af_p.low());
+                self.reg.af_p = u16::from_pair(a, f);
+                Step::Run(4)
+            }
             0x17 => {
                 // rla
                 self.reg.add_pc(1);
-                let res = (self.reg.a << 1) | (self.reg.f.cf & 0x01);
+                let res = (self.reg.a << 1) | self.reg.f.c_bit();
                 self.affect_flag_rotate_a(res, self.reg.a >> 7);
                 self.reg.a = res;
                 Step::Run(4)
