@@ -313,6 +313,17 @@ impl Emulator {
         cf
     }
 
+    fn affect_flag_add16(&mut self, opr1: u16, opr2: u16, res: u32) {
+        let resh = (res >> 8) as u8;
+        let cf = (res >> 16) as u8;
+        let h = (opr1 >> 8) as u8 ^ (opr2 >> 8) as u8 ^ resh;
+        self.reg.f.set_wo_z(Flag::F53_MASK, resh);
+        self.reg.f.set_wo_z(Flag::H_MASK, h);
+        self.reg
+            .f
+            .set_wo_z(Flag::N_MASK | Flag::C_MASK, NFlag::Add.as_bit() | cf);
+    }
+
     fn affect_flag_rotate_a(&mut self, res: u8, cf: u8) {
         self.reg.f.set_wo_z(Flag::F53_MASK, res);
         self.reg.f.set_wo_z(
@@ -414,6 +425,29 @@ impl Emulator {
                 self.reg.f.from_u8(self.reg.af_p.low());
                 self.reg.af_p = u16::from_pair(a, f);
                 Step::Run(4)
+            }
+            op if op & 0xcf == 0x09 => {
+                // add hl,rr
+                self.reg.add_pc(1);
+                let opr = self.reg.reg16((op >> 4) & 0x03);
+                let res = self.reg.hl as u32 + opr as u32;
+                self.affect_flag_add16(self.reg.hl, opr, res);
+                self.reg.hl = res as u16;
+                Step::Run(11)
+            }
+            0x0a => {
+                // ld a,(bc)
+                self.reg.add_pc(1);
+                self.reg.a = self.mem_ref8(self.reg.bc);
+                Step::Run(7)
+            }
+            op if op & 0xcf == 0x0b => {
+                // dec rr
+                self.reg.add_pc(1);
+                let index = (op >> 4) & 0x03;
+                self.reg
+                    .set_reg16(index, self.reg.reg16(index).wrapping_sub(1));
+                Step::Run(6)
             }
             0x17 => {
                 // rla
