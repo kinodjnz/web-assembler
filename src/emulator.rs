@@ -179,6 +179,30 @@ impl Register {
         self.hl.low()
     }
 
+    fn set_b(&mut self, x: u8) {
+        self.bc = (self.bc & 0x00ff) | ((x as u16) << 8);
+    }
+
+    fn set_c(&mut self, x: u8) {
+        self.bc = (self.bc & 0xff00) | x as u16
+    }
+
+    fn set_d(&mut self, x: u8) {
+        self.de = (self.de & 0x00ff) | ((x as u16) << 8);
+    }
+
+    fn set_e(&mut self, x: u8) {
+        self.de = (self.de & 0xff00) | x as u16;
+    }
+
+    fn set_h(&mut self, x: u8) {
+        self.hl = (self.hl & 0x00ff) | ((x as u16) << 8);
+    }
+
+    fn set_l(&mut self, x: u8) {
+        self.hl = (self.hl & 0xff00) | x as u16;
+    }
+
     fn reg8(&self, index: u8) -> u8 {
         match index {
             0 => self.b(),
@@ -204,12 +228,12 @@ impl Register {
 
     fn set_reg8(&mut self, index: u8, value: u8) {
         match index {
-            0 => self.bc = (self.bc & 0x00ff) | ((value as u16) << 8),
-            1 => self.bc = (self.bc & 0xff00) | value as u16,
-            2 => self.de = (self.de & 0x00ff) | ((value as u16) << 8),
-            3 => self.de = (self.de & 0xff00) | value as u16,
-            4 => self.hl = (self.hl & 0x00ff) | ((value as u16) << 8),
-            5 => self.hl = (self.hl & 0xff00) | value as u16,
+            0 => self.set_b(value),
+            1 => self.set_c(value),
+            2 => self.set_d(value),
+            3 => self.set_e(value),
+            4 => self.set_h(value),
+            5 => self.set_l(value),
             7 => self.a = value,
             i => panic!("unknown register: {}", i),
         };
@@ -227,6 +251,10 @@ impl Register {
 
     fn add_pc(&mut self, i: u16) {
         self.pc = self.pc.wrapping_add(i);
+    }
+
+    fn add8_pc(&mut self, i: u8) {
+        self.pc = self.pc.wrapping_add(i as i8 as u16);
     }
 }
 
@@ -464,6 +492,20 @@ impl Emulator {
                 self.affect_flag_rotate_a(res, self.reg.a);
                 self.reg.a = res;
                 Step::Run(4)
+            }
+            0x10 => {
+                // djnz
+                self.reg.add_pc(1);
+                let o = self.mem_ref8(self.reg.pc);
+                self.reg.add_pc(1);
+                let x = self.reg.b().wrapping_sub(1);
+                self.reg.set_b(x);
+                if x == 0x00u8 {
+                    Step::Run(8)
+                } else {
+                    self.reg.add8_pc(o);
+                    Step::Run(13)
+                }
             }
             0x17 => {
                 // rla
