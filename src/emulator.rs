@@ -400,8 +400,16 @@ impl Emulator {
                 self.reg.set_reg8(index, res as u8);
                 Step::Run(4)
             }
+            0x36 => {
+                // ld (hl),n
+                self.reg.add_pc(1);
+                let n = self.mem_ref8(self.reg.pc);
+                self.mem_store8(self.reg.hl, n);
+                self.reg.add_pc(1);
+                Step::Run(10)
+            }
             op if op & 0xc7 == 0x06 => {
-                // ld a,n
+                // ld r,n
                 self.reg.add_pc(1);
                 let n = self.mem_ref8(self.reg.pc);
                 self.reg.set_reg8((op >> 3) & 0x07, n);
@@ -448,6 +456,14 @@ impl Emulator {
                 self.reg
                     .set_reg16(index, self.reg.reg16(index).wrapping_sub(1));
                 Step::Run(6)
+            }
+            0x0f => {
+                // rrca
+                self.reg.add_pc(1);
+                let res = (self.reg.a >> 1) | (self.reg.a << 7);
+                self.affect_flag_rotate_a(res, self.reg.a);
+                self.reg.a = res;
+                Step::Run(4)
             }
             0x17 => {
                 // rla
