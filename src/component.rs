@@ -1,5 +1,5 @@
 use crate::assembler::parse_and_assemble;
-use crate::emulator::Emulator;
+use crate::emulator::{Emulator, Register};
 use crate::parser::Parser;
 use yew::{html, Component, ComponentLink, Html, ShouldRender};
 
@@ -7,7 +7,7 @@ pub struct Model {
     value: String,
     code: String,
     step: String,
-    reg: String,
+    reg: Register,
     emulator: Emulator,
 }
 
@@ -26,13 +26,14 @@ impl Model {
         self.emulator.reset();
         self.emulator.load(&code, 0x0100);
         self.code = code.to_hex();
+        self.reg = self.emulator.reg.clone();
         Ok(())
     }
 
     fn step(&mut self) -> Result<(), ()> {
         let step = self.emulator.step();
         self.step = format!("{:?}", step);
-        self.reg = self.emulator.show_reg();
+        self.reg = self.emulator.reg.clone();
         Ok(())
     }
 }
@@ -46,7 +47,7 @@ impl Component for Model {
             value: String::new(),
             code: String::new(),
             step: String::new(),
-            reg: String::new(),
+            reg: Default::default(),
             emulator: Emulator::new(),
         }
     }
@@ -83,7 +84,16 @@ impl Component for Model {
                 <div><code>{self.code.clone()}</code></div>
                 <button onclick=|_| Msg::Step>{ "step" }</button>
                 <div><code>{self.step.clone()}</code></div>
-                <div><code>{self.reg.clone()}</code></div>
+                <div><code>{
+                    format!("A:{:02X} F:{:08b}", self.reg.a, self.reg.f.as_u8())
+                }</code></div>
+                <div><code>{format!("BC:{:04X}", self.reg.bc)}</code></div>
+                <div><code>{format!("DE:{:04X}", self.reg.de)}</code></div>
+                <div><code>{format!("HL:{:04X}", self.reg.hl)}</code></div>
+                <div><code>{format!("IX:{:04X}", self.reg.ix)}</code></div>
+                <div><code>{format!("IY:{:04X}", self.reg.iy)}</code></div>
+                <div><code>{format!("SP:{:04X}", self.reg.sp)}</code></div>
+                <div><code>{format!("PC:{:04X}", self.reg.pc)}</code></div>
             </div>
         }
     }

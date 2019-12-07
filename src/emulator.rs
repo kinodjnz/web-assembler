@@ -1,6 +1,6 @@
 use crate::assembler::CodeChunk;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum ZFlag {
     Acc(u8),
     Bit,
@@ -13,10 +13,10 @@ impl Default for ZFlag {
 }
 
 impl ZFlag {
-    fn as_bit(&self, f: u8) -> u8 {
+    fn as_bit(self, f: u8) -> u8 {
         match self {
             ZFlag::Acc(x) => {
-                if *x == 0 {
+                if x == 0 {
                     f | 0x40u8
                 } else {
                     f & !0x40u8
@@ -27,7 +27,7 @@ impl ZFlag {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum PVFlag {
     Overflow(u8), // bit 7
     Parity(u8),   // before parity calculation
@@ -40,7 +40,7 @@ impl Default for PVFlag {
 }
 
 impl PVFlag {
-    fn as_bit(&self) -> u8 {
+    fn as_bit(self) -> u8 {
         match self {
             PVFlag::Overflow(x) => (x >> 7) & 0x01u8,
             PVFlag::Parity(x) => (x.count_ones() + 1) as u8 & 0x01u8,
@@ -48,7 +48,7 @@ impl PVFlag {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum NFlag {
     Add,
     Sub,
@@ -61,7 +61,7 @@ impl Default for NFlag {
 }
 
 impl NFlag {
-    fn as_bit(&self) -> u8 {
+    fn as_bit(self) -> u8 {
         match self {
             NFlag::Add => 0x00u8,
             NFlag::Sub => 0x02u8,
@@ -69,7 +69,7 @@ impl NFlag {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Flag {
     f: u8, // bit 7,(6),5,4,3,1,0
     zf: ZFlag,
@@ -96,7 +96,7 @@ impl Flag {
         self.f = (self.f & !mask) | (value & mask);
     }
 
-    fn as_u8(&self) -> u8 {
+    pub fn as_u8(&self) -> u8 {
         self.zf.as_bit(self.f) | (self.pv.as_bit() << 2)
     }
 
@@ -137,23 +137,23 @@ impl Flag {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Register {
-    a: u8,
-    f: Flag,
-    bc: u16,
-    de: u16,
-    hl: u16,
-    ix: u16,
-    iy: u16,
-    sp: u16,
-    pc: u16,
-    i: u8,
-    r: u8,
-    af_p: u16,
-    bc_p: u16,
-    de_p: u16,
-    hl_p: u16,
+    pub a: u8,
+    pub f: Flag,
+    pub bc: u16,
+    pub de: u16,
+    pub hl: u16,
+    pub ix: u16,
+    pub iy: u16,
+    pub sp: u16,
+    pub pc: u16,
+    pub i: u8,
+    pub r: u8,
+    pub af_p: u16,
+    pub bc_p: u16,
+    pub de_p: u16,
+    pub hl_p: u16,
 }
 
 trait R16 {
@@ -286,8 +286,8 @@ impl Register {
 
 #[derive(Debug)]
 pub struct Emulator {
-    mem: Vec<u8>,
-    reg: Register,
+    pub mem: Vec<u8>,
+    pub reg: Register,
 }
 
 #[derive(Debug)]
@@ -319,10 +319,6 @@ impl Emulator {
 
     pub fn load(&mut self, code: &CodeChunk, addr: usize) {
         self.mem[addr..(addr + code.len())].copy_from_slice(&code.code);
-    }
-
-    pub fn show_reg(&self) -> String {
-        format!("{:?}", self.reg)
     }
 
     pub fn mem_ref8(&self, addr: u16) -> u8 {
@@ -389,6 +385,15 @@ impl Emulator {
             Flag::H_MASK | Flag::N_MASK | Flag::C_MASK,
             cf & Flag::C_MASK,
         );
+        self.reg.f.pv = PVFlag::Parity(res);
+    }
+
+    fn affect_flag_and(&mut self, res: u8) {
+        self.reg.f.set_wo_z(Flag::S_MASK | Flag::F53_MASK, res);
+        self.reg
+            .f
+            .set_wo_z(Flag::H_MASK | Flag::N_MASK | Flag::C_MASK, Flag::H_MASK);
+        self.reg.f.zf = ZFlag::Acc(res);
         self.reg.f.pv = PVFlag::Parity(res);
     }
 
@@ -671,9 +676,10 @@ impl Emulator {
                 self.reg.add_pc(1);
                 self.reg.f.set_wo_z(Flag::F53_MASK, self.reg.a);
                 let c = self.reg.f.is_c() as u8;
-                self.reg
-                    .f
-                    .set_wo_z(Flag::H_MASK | Flag::C_MASK, (c ^ 0x01) | (c << 4));
+                self.reg.f.set_wo_z(
+                    Flag::H_MASK | Flag::N_MASK | Flag::C_MASK,
+                    (c ^ 0x01) | (c << 4),
+                );
                 Step::Run(4)
             }
             0x76 => Step::Halt,
@@ -771,6 +777,22 @@ impl Emulator {
                     .wrapping_sub(self.reg.f.c_bit() as u32);
                 self.affect_flag_sub8(self.reg.a, opr, res);
                 self.reg.a = res as u8;
+                Step::Run(4)
+            }
+            0xa6 => {
+                // and (hl)
+                self.reg.add_pc(1);
+                let res = self.reg.a & self.mem_ref8(self.reg.hl);
+                self.affect_flag_and(res);
+                self.reg.a = res;
+                Step::Run(7)
+            }
+            op if op & 0xf8 == 0xa0 => {
+                // and r
+                self.reg.add_pc(1);
+                let res = self.reg.a & self.reg.reg8(op & 0x07);
+                self.affect_flag_and(res);
+                self.reg.a = res;
                 Step::Run(4)
             }
             _ => Step::IllegalInstruction,
