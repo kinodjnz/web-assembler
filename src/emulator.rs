@@ -397,6 +397,15 @@ impl Emulator {
         self.reg.f.pv = PVFlag::Parity(res);
     }
 
+    fn affect_flag_or_xor(&mut self, res: u8) {
+        self.reg.f.set_wo_z(
+            Flag::S_MASK | Flag::F53_MASK | Flag::H_MASK | Flag::N_MASK | Flag::C_MASK,
+            res & (Flag::S_MASK | Flag::F53_MASK),
+        );
+        self.reg.f.zf = ZFlag::Acc(res);
+        self.reg.f.pv = PVFlag::Parity(res);
+    }
+
     pub fn step(&mut self) -> Step {
         match self.mem_ref8(self.reg.pc) {
             0x00 => {
@@ -792,6 +801,22 @@ impl Emulator {
                 self.reg.add_pc(1);
                 let res = self.reg.a & self.reg.reg8(op & 0x07);
                 self.affect_flag_and(res);
+                self.reg.a = res;
+                Step::Run(4)
+            }
+            0xae => {
+                // xor (hl)
+                self.reg.add_pc(1);
+                let res = self.reg.a ^ self.mem_ref8(self.reg.hl);
+                self.affect_flag_or_xor(res);
+                self.reg.a = res;
+                Step::Run(7)
+            }
+            op if op & 0xf8 == 0xa8 => {
+                // xor r
+                self.reg.add_pc(1);
+                let res = self.reg.a ^ self.reg.reg8(op & 0x07);
+                self.affect_flag_or_xor(res);
                 self.reg.a = res;
                 Step::Run(4)
             }
