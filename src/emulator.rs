@@ -347,6 +347,11 @@ impl Emulator {
         self.reg.f.set_wo_z(Flag::C_MASK, cf);
     }
 
+    fn affect_flag_sub8(&mut self, opr1: u8, opr2: u8, res: u32) {
+        let cf = self.affect_flag_add_sub8(opr1, opr2, res, NFlag::Sub);
+        self.reg.f.set_wo_z(Flag::C_MASK, cf);
+    }
+
     fn affect_flag_inc8(&mut self, opr: u8, res: u32) {
         self.affect_flag_add_sub8(opr, 1, res, NFlag::Add);
     }
@@ -646,6 +651,7 @@ impl Emulator {
             }
             0x37 => {
                 // scf
+                self.reg.add_pc(1);
                 self.reg.f.set_wo_z(Flag::F53_MASK, self.reg.a);
                 self.reg
                     .f
@@ -706,6 +712,64 @@ impl Emulator {
                 let opr = self.reg.reg8(op & 0x07);
                 let res = self.reg.a as u32 + opr as u32;
                 self.affect_flag_add8(self.reg.a, opr, res);
+                self.reg.a = res as u8;
+                Step::Run(4)
+            }
+            0x8e => {
+                // adc a,(hl)
+                self.reg.add_pc(1);
+                let opr = self.mem_ref8(self.reg.hl);
+                let res = self.reg.a as u32 + opr as u32 + self.reg.f.c_bit() as u32;
+                self.affect_flag_add8(self.reg.a, opr, res);
+                self.reg.a = res as u8;
+                Step::Run(7)
+            }
+            op if op & 0xf8 == 0x88 => {
+                // adc a,r
+                self.reg.add_pc(1);
+                let opr = self.reg.reg8(op & 0x07);
+                let res = self.reg.a as u32 + opr as u32 + self.reg.f.c_bit() as u32;
+                self.affect_flag_add8(self.reg.a, opr, res);
+                self.reg.a = res as u8;
+                Step::Run(4)
+            }
+            0x96 => {
+                // sub (hl)
+                self.reg.add_pc(1);
+                let opr = self.mem_ref8(self.reg.hl);
+                let res = (self.reg.a as u32).wrapping_sub(opr as u32);
+                self.affect_flag_sub8(self.reg.a, opr, res);
+                self.reg.a = res as u8;
+                Step::Run(7)
+            }
+            op if op & 0xf8 == 0x90 => {
+                // sub r
+                self.reg.add_pc(1);
+                let opr = self.reg.reg8(op & 0x07);
+                let res = (self.reg.a as u32).wrapping_sub(opr as u32);
+                self.affect_flag_sub8(self.reg.a, opr, res);
+                self.reg.a = res as u8;
+                Step::Run(4)
+            }
+            0x9e => {
+                // sbc a,(hl)
+                self.reg.add_pc(1);
+                let opr = self.mem_ref8(self.reg.hl);
+                let res = (self.reg.a as u32)
+                    .wrapping_sub(opr as u32)
+                    .wrapping_sub(self.reg.f.c_bit() as u32);
+                self.affect_flag_sub8(self.reg.a, opr, res);
+                self.reg.a = res as u8;
+                Step::Run(7)
+            }
+            op if op & 0xf8 == 0x98 => {
+                // sbc a,r
+                self.reg.add_pc(1);
+                let opr = self.reg.reg8(op & 0x07);
+                let res = (self.reg.a as u32)
+                    .wrapping_sub(opr as u32)
+                    .wrapping_sub(self.reg.f.c_bit() as u32);
+                self.affect_flag_sub8(self.reg.a, opr, res);
                 self.reg.a = res as u8;
                 Step::Run(4)
             }

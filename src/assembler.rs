@@ -463,7 +463,7 @@ fn assemble_no_operand2(operands: Operands, c1: u8, c2: u8) -> Result<CodeChunk,
 fn assemble_adc(operands: Operands) -> Result<CodeChunk, AssembleError> {
     match expect_two_operands(operands)? {
         (AO::A, ii) if is_ind_hlxy(&ii) => Ok(gen1_ind_hlxy(0x8e, ii)),
-        (AO::A, r) if is_reg8(&r) => Ok(gen1(reg8(88, r))),
+        (AO::A, r) if is_reg8(&r) => Ok(gen1(reg8(0x88, r))),
         (AO::A, AO::Immediate(n)) => Ok(gen2(0xce, n as u8)),
         (AO::HL, rr) if is_reg16(&rr) => Ok(gen2(0xed, reg16(0x4a, rr))),
         _ => Err(AssembleError::IllegalOperand),
