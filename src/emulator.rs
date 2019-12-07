@@ -110,12 +110,24 @@ impl Flag {
         self.f & Flag::C_MASK
     }
 
+    fn is_c(&self) -> bool {
+        self.f & Flag::C_MASK != 0
+    }
+
+    fn is_h(&self) -> bool {
+        self.f & Flag::H_MASK != 0
+    }
+
+    fn is_n(&self) -> bool {
+        self.f & Flag::N_MASK != 0
+    }
+
     fn cond(&self, index: u8) -> bool {
         match index {
             0 => self.zf.as_bit(self.f) & Flag::Z_MASK == 0,
             1 => self.zf.as_bit(self.f) & Flag::Z_MASK != 0,
-            2 => self.f & Flag::C_MASK == 0,
-            3 => self.f & Flag::C_MASK != 0,
+            2 => !self.is_c(),
+            3 => self.is_c(),
             4 => self.pv.as_bit() == 0,
             5 => self.pv.as_bit() != 0,
             6 => self.f & Flag::S_MASK == 0,
@@ -569,6 +581,61 @@ impl Emulator {
                     Step::Run(7)
                 }
             }
+            0x22 => {
+                // ld (nn),hl
+                self.reg.add_pc(1);
+                let nn = self.mem_ref16(self.reg.pc);
+                self.reg.add_pc(2);
+                self.mem_store16(nn, self.reg.hl);
+                Step::Run(16)
+            }
+            0x27 => {
+                // daa
+                self.reg.add_pc(1);
+                let c = self.reg.f.is_c() || self.reg.a > 0x99;
+                let mut offset = 0x00u8;
+                if (self.reg.a & 0x0f) > 0x09 || self.reg.f.is_h() {
+                    offset += 0x06u8;
+                }
+                if c || self.reg.a > 0x99 {
+                    offset += 0x60u8;
+                }
+                let h = match (self.reg.f.is_n(), self.reg.f.is_h()) {
+                    (true, false) => false,
+                    (true, true) => (self.reg.a & 0x0f) < 0x06,
+                    _ => (self.reg.a & 0x0f) > 0x09,
+                };
+                let a = if self.reg.f.is_n() {
+                    self.reg.a.wrapping_sub(offset)
+                } else {
+                    self.reg.a.wrapping_add(offset)
+                };
+                self.reg.a = a;
+                self.reg.f.set_wo_z(Flag::S_MASK | Flag::F53_MASK, a);
+                self.reg
+                    .f
+                    .set_wo_z(Flag::H_MASK | Flag::C_MASK, ((h as u8) << 4) | c as u8);
+                self.reg.f.zf = ZFlag::Acc(a);
+                self.reg.f.pv = PVFlag::Parity(a);
+                Step::Run(4)
+            }
+            0x2a => {
+                // ld hl,(nn)
+                self.reg.add_pc(1);
+                let nn = self.mem_ref16(self.reg.pc);
+                self.reg.add_pc(2);
+                self.reg.hl = self.mem_ref16(nn);
+                Step::Run(16)
+            }
+            0x2f => {
+                // cpl
+                self.reg.a = !self.reg.a;
+                self.reg.f.set_wo_z(Flag::F53_MASK, self.reg.a);
+                self.reg
+                    .f
+                    .set_wo_z(Flag::H_MASK | Flag::N_MASK, Flag::H_MASK | Flag::N_MASK);
+                Step::Run(4)
+            }
             0x76 => Step::Halt,
             op if op & 0xf8 == 0x70 => Step::Halt, // TODO ld (hl),r
             op if op & 0xc7 == 0x46 => Step::Halt, // TODO ld r,(hl)
@@ -580,7 +647,7 @@ impl Emulator {
                 Step::Run(4)
             }
             0x86 => Step::Halt, // TODO add a,(hl)
-            op if op & 0xc0 == 0x80 => {
+            op if op & 0xf8 == 0x80 => {
                 // add a,r
                 self.reg.add_pc(1);
                 let opr = self.reg.reg8(op & 0x07);
