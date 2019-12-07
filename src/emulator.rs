@@ -636,9 +636,54 @@ impl Emulator {
                     .set_wo_z(Flag::H_MASK | Flag::N_MASK, Flag::H_MASK | Flag::N_MASK);
                 Step::Run(4)
             }
+            0x32 => {
+                // ld (nn),a
+                self.reg.add_pc(1);
+                let nn = self.mem_ref16(self.reg.pc);
+                self.reg.add_pc(2);
+                self.mem_store8(nn, self.reg.a);
+                Step::Run(13)
+            }
+            0x37 => {
+                // scf
+                self.reg.f.set_wo_z(Flag::F53_MASK, self.reg.a);
+                self.reg
+                    .f
+                    .set_wo_z(Flag::H_MASK | Flag::N_MASK | Flag::C_MASK, Flag::C_MASK);
+                Step::Run(4)
+            }
+            0x3a => {
+                // ld a,(nn)
+                self.reg.add_pc(1);
+                let nn = self.mem_ref16(self.reg.pc);
+                self.reg.add_pc(2);
+                self.reg.a = self.mem_ref8(nn);
+                Step::Run(13)
+            }
+            0x3f => {
+                // ccf
+                self.reg.add_pc(1);
+                self.reg.f.set_wo_z(Flag::F53_MASK, self.reg.a);
+                let c = self.reg.f.is_c() as u8;
+                self.reg
+                    .f
+                    .set_wo_z(Flag::H_MASK | Flag::C_MASK, (c ^ 0x01) | (c << 4));
+                Step::Run(4)
+            }
             0x76 => Step::Halt,
-            op if op & 0xf8 == 0x70 => Step::Halt, // TODO ld (hl),r
-            op if op & 0xc7 == 0x46 => Step::Halt, // TODO ld r,(hl)
+            op if op & 0xf8 == 0x70 => {
+                // ld (hl),r
+                self.reg.add_pc(1);
+                self.mem_store8(self.reg.hl, self.reg.reg8(op & 0x07));
+                Step::Run(7)
+            }
+            op if op & 0xc7 == 0x46 => {
+                // ld r,(hl)
+                self.reg.add_pc(1);
+                self.reg
+                    .set_reg8((op >> 3) & 0x07, self.mem_ref8(self.reg.hl));
+                Step::Run(7)
+            }
             op if op & 0xc0 == 0x40 => {
                 // ld r,r'
                 self.reg.add_pc(1);
@@ -646,7 +691,15 @@ impl Emulator {
                 self.reg.set_reg8(op & 0x07, self.reg.reg8(src));
                 Step::Run(4)
             }
-            0x86 => Step::Halt, // TODO add a,(hl)
+            0x86 => {
+                // add a,(hl)
+                self.reg.add_pc(1);
+                let opr = self.mem_ref8(self.reg.hl);
+                let res = self.reg.a as u32 + opr as u32;
+                self.affect_flag_add8(self.reg.a, opr, res);
+                self.reg.a = res as u8;
+                Step::Run(7)
+            }
             op if op & 0xf8 == 0x80 => {
                 // add a,r
                 self.reg.add_pc(1);
