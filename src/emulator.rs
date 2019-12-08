@@ -896,6 +896,21 @@ impl Emulator {
         Step::Run(11)
     }
 
+    fn op_ret(&mut self, _: u8) -> Step {
+        self.reg.sp = self.reg.sp.wrapping_add(2);
+        self.reg.pc = self.mem_ref16(self.reg.sp);
+        Step::Run(10)
+    }
+
+    fn op_call_nn(&mut self, _: u8) -> Step {
+        let pc = self.mem_ref16(self.reg.pc);
+        self.reg.add_pc(2);
+        self.mem_store16(self.reg.sp, self.reg.pc);
+        self.reg.sp = self.reg.sp.wrapping_sub(2);
+        self.reg.pc = pc;
+        Step::Run(17)
+    }
+
     pub fn step(&mut self) -> Step {
         let op = self.mem_ref8(self.reg.pc);
         let mut run_op = |f: fn(&mut Self, u8) -> Step| {
@@ -962,7 +977,15 @@ impl Emulator {
             op if op & 0xcf == 0xc5 => run_op(Self::op_push_rr),
             0xc6 => run_op(Self::op_add_a_n),
             op if op & 0xc7 == 0xc7 => run_op(Self::op_rst_n),
+            0xc9 => run_op(Self::op_ret),
+            0xcb => run_op(Self::op_bits),
+            0xcd => run_op(Self::op_call_nn),
             _ => Step::IllegalInstruction,
         }
+    }
+
+    fn op_bits(&mut self, _: u8) -> Step {
+        // TODO bits instructions
+        Step::IllegalInstruction
     }
 }
