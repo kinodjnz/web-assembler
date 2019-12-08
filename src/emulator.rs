@@ -824,8 +824,8 @@ impl Emulator {
     }
 
     fn op_pop_rr(&mut self, op: u8) -> Step {
-        self.reg.sp = self.reg.sp.wrapping_add(2);
         let value = self.mem_ref16(self.reg.sp);
+        self.reg.sp = self.reg.sp.wrapping_add(2);
         match (op >> 4) & 0x03 {
             0 => self.reg.bc = value,
             1 => self.reg.de = value,
@@ -865,6 +865,19 @@ impl Emulator {
             self.reg.add_pc(2);
             Step::Run(10)
         }
+    }
+
+    fn op_push_rr(&mut self, op: u8) -> Step {
+        self.reg.sp = self.reg.sp.wrapping_sub(2);
+        let value = match (op >> 4) & 0x03 {
+            0 => self.reg.bc,
+            1 => self.reg.de,
+            2 => self.reg.hl,
+            3 => R16::from_pair(self.reg.a, self.reg.f.as_u8()),
+            i => panic!("unknown register: {}", i),
+        };
+        self.mem_store16(self.reg.sp, value);
+        Step::Run(11)
     }
 
     pub fn step(&mut self) -> Step {
@@ -930,6 +943,7 @@ impl Emulator {
             op if op & 0xc7 == 0xc2 => run_op(Self::op_jp_cond_nn),
             0xc3 => run_op(Self::op_jp_nn),
             op if op & 0xc7 == 0xc4 => run_op(Self::op_call_cond_nn),
+            op if op & 0xcf == 0xc5 => run_op(Self::op_push_rr),
             _ => Step::IllegalInstruction,
         }
     }
