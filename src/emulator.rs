@@ -848,6 +848,25 @@ impl Emulator {
         Step::Run(10)
     }
 
+    fn op_jp_nn(&mut self, _: u8) -> Step {
+        self.reg.pc = self.mem_ref16(self.reg.pc);
+        Step::Run(10)
+    }
+
+    fn op_call_cond_nn(&mut self, op: u8) -> Step {
+        if self.reg.f.cond((op >> 3) & 0x07) {
+            let pc = self.mem_ref16(self.reg.pc);
+            self.reg.add_pc(2);
+            self.mem_store16(self.reg.sp, self.reg.pc);
+            self.reg.sp = self.reg.sp.wrapping_sub(2);
+            self.reg.pc = pc;
+            Step::Run(17)
+        } else {
+            self.reg.add_pc(2);
+            Step::Run(10)
+        }
+    }
+
     pub fn step(&mut self) -> Step {
         let op = self.mem_ref8(self.reg.pc);
         let mut run_op = |f: fn(&mut Self, u8) -> Step| {
@@ -909,6 +928,8 @@ impl Emulator {
             op if op & 0xc7 == 0xc0 => run_op(Self::op_ret_cond),
             op if op & 0xcf == 0xc1 => run_op(Self::op_pop_rr),
             op if op & 0xc7 == 0xc2 => run_op(Self::op_jp_cond_nn),
+            0xc3 => run_op(Self::op_jp_nn),
+            op if op & 0xc7 == 0xc4 => run_op(Self::op_call_cond_nn),
             _ => Step::IllegalInstruction,
         }
     }
