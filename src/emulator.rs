@@ -813,6 +813,33 @@ impl Emulator {
         Step::Run(4)
     }
 
+    fn op_ret_cond(&mut self, op: u8) -> Step {
+        if self.reg.f.cond((op >> 3) & 0x07) {
+            self.reg.sp = self.reg.sp.wrapping_add(2);
+            let pc = self.mem_ref16(self.reg.sp);
+            self.reg.pc = pc;
+            Step::Run(11)
+        } else {
+            Step::Run(5)
+        }
+    }
+
+    fn op_pop_rr(&mut self, op: u8) -> Step {
+        self.reg.sp = self.reg.sp.wrapping_add(2);
+        let value = self.mem_ref16(self.reg.sp);
+        match (op >> 4) & 0x03 {
+            0 => self.reg.bc = value,
+            1 => self.reg.de = value,
+            2 => self.reg.hl = value,
+            3 => {
+                self.reg.a = value.high();
+                self.reg.f.from_u8(value.low());
+            }
+            i => panic!("unknown register: {}", i),
+        };
+        Step::Run(10)
+    }
+
     pub fn step(&mut self) -> Step {
         let op = self.mem_ref8(self.reg.pc);
         let mut run_op = |f: fn(&mut Self, u8) -> Step| {
@@ -871,6 +898,8 @@ impl Emulator {
             op if op & 0xf8 == 0xb0 => run_op(Self::op_or_r),
             0xbe => run_op(Self::op_cp_ind_hl),
             op if op & 0xf8 == 0xb8 => run_op(Self::op_cp_r),
+            op if op & 0xc7 == 0xc0 => run_op(Self::op_ret_cond),
+            op if op & 0xcf == 0xc1 => run_op(Self::op_pop_rr),
             _ => Step::IllegalInstruction,
         }
     }
