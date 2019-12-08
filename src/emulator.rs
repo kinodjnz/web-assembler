@@ -406,420 +406,471 @@ impl Emulator {
         self.reg.f.pv = PVFlag::Parity(res);
     }
 
+    fn affect_flag_cp(&mut self, opr1: u8, opr2: u8, res: u32) {
+        let resl = res as u8;
+        let cf = (res >> 8) as u8;
+        let h = opr1 ^ opr2 ^ resl;
+        self.reg.f.set_wo_z(Flag::S_MASK, resl);
+        self.reg.f.set_wo_z(Flag::F53_MASK, opr2);
+        self.reg.f.set_wo_z(Flag::H_MASK, h);
+        self.reg.f.set_wo_z(Flag::N_MASK, NFlag::Sub.as_bit());
+        self.reg.f.set_wo_z(Flag::C_MASK, cf);
+        self.reg.f.zf = ZFlag::Acc(resl);
+        self.reg.f.pv = PVFlag::Overflow(h ^ (cf << 7));
+    }
+
+    fn op_nop(&mut self, _: u8) -> Step {
+        Step::Run(4)
+    }
+
+    fn op_ld_rr_nn(&mut self, op: u8) -> Step {
+        let nn = self.mem_ref16(self.reg.pc);
+        self.reg.add_pc(2);
+        self.reg.set_reg16((op >> 4) & 0x03, nn);
+        Step::Run(10)
+    }
+
+    fn op_ld_ind_bc_a(&mut self, _: u8) -> Step {
+        self.mem_store8(self.reg.bc, self.reg.a);
+        Step::Run(7)
+    }
+
+    fn op_inc_rr(&mut self, op: u8) -> Step {
+        let index = (op >> 4) & 0x03;
+        self.reg
+            .set_reg16(index, self.reg.reg16(index).wrapping_add(1));
+        Step::Run(6)
+    }
+
+    fn op_inc_ind_hl(&mut self, _: u8) -> Step {
+        let opr = self.mem_ref8(self.reg.hl);
+        let res = opr as u32 + 1;
+        self.affect_flag_inc8(opr, res);
+        self.mem_store8(self.reg.hl, res as u8);
+        Step::Run(11)
+    }
+
+    fn op_inc_r(&mut self, op: u8) -> Step {
+        let index = (op >> 3) & 0x07;
+        let opr = self.reg.reg8(index);
+        let res = opr as u32 + 1;
+        self.affect_flag_inc8(opr, res);
+        self.reg.set_reg8(index, res as u8);
+        Step::Run(4)
+    }
+
+    fn op_dec_ind_hl(&mut self, _: u8) -> Step {
+        let opr = self.mem_ref8(self.reg.hl);
+        let res = (opr as u32).wrapping_sub(1);
+        self.affect_flag_dec8(opr, res);
+        self.mem_store8(self.reg.hl, res as u8);
+        Step::Run(11)
+    }
+
+    fn op_dec_r(&mut self, op: u8) -> Step {
+        let index = (op >> 3) & 0x07;
+        let opr = self.reg.reg8(index);
+        let res = (opr as u32).wrapping_sub(1);
+        self.affect_flag_dec8(opr, res);
+        self.reg.set_reg8(index, res as u8);
+        Step::Run(4)
+    }
+
+    fn op_ld_ind_hl_n(&mut self, _: u8) -> Step {
+        let n = self.mem_ref8(self.reg.pc);
+        self.mem_store8(self.reg.hl, n);
+        self.reg.add_pc(1);
+        Step::Run(10)
+    }
+
+    fn op_ld_r_n(&mut self, op: u8) -> Step {
+        let n = self.mem_ref8(self.reg.pc);
+        self.reg.set_reg8((op >> 3) & 0x07, n);
+        self.reg.add_pc(1);
+        Step::Run(7)
+    }
+
+    fn op_rlca(&mut self, _: u8) -> Step {
+        let res = (self.reg.a << 1) | (self.reg.a >> 7);
+        self.affect_flag_rotate_a(res, self.reg.a >> 7);
+        self.reg.a = res;
+        Step::Run(4)
+    }
+
+    fn op_ex_af_af_p(&mut self, _: u8) -> Step {
+        let a = self.reg.a;
+        let f = self.reg.f.as_u8();
+        self.reg.a = self.reg.af_p.high();
+        self.reg.f.from_u8(self.reg.af_p.low());
+        self.reg.af_p = u16::from_pair(a, f);
+        Step::Run(4)
+    }
+
+    fn op_add_hl_rr(&mut self, op: u8) -> Step {
+        let opr = self.reg.reg16((op >> 4) & 0x03);
+        let res = self.reg.hl as u32 + opr as u32;
+        self.affect_flag_add16(self.reg.hl, opr, res);
+        self.reg.hl = res as u16;
+        Step::Run(11)
+    }
+
+    fn op_ld_a_ind_bc(&mut self, _: u8) -> Step {
+        self.reg.a = self.mem_ref8(self.reg.bc);
+        Step::Run(7)
+    }
+
+    fn op_dec_rr(&mut self, op: u8) -> Step {
+        let index = (op >> 4) & 0x03;
+        self.reg
+            .set_reg16(index, self.reg.reg16(index).wrapping_sub(1));
+        Step::Run(6)
+    }
+
+    fn op_rrca(&mut self, _: u8) -> Step {
+        let res = (self.reg.a >> 1) | (self.reg.a << 7);
+        self.affect_flag_rotate_a(res, self.reg.a);
+        self.reg.a = res;
+        Step::Run(4)
+    }
+
+    fn op_djnz_o(&mut self, _: u8) -> Step {
+        let o = self.mem_ref8(self.reg.pc);
+        self.reg.add_pc(1);
+        let x = self.reg.b().wrapping_sub(1);
+        self.reg.set_b(x);
+        if x == 0x00u8 {
+            Step::Run(8)
+        } else {
+            self.reg.add8_pc(o);
+            Step::Run(13)
+        }
+    }
+
+    fn op_ld_ind_de_a(&mut self, _: u8) -> Step {
+        self.mem_store8(self.reg.de, self.reg.a);
+        Step::Run(7)
+    }
+
+    fn op_rla(&mut self, _: u8) -> Step {
+        let res = (self.reg.a << 1) | self.reg.f.c_bit();
+        self.affect_flag_rotate_a(res, self.reg.a >> 7);
+        self.reg.a = res;
+        Step::Run(4)
+    }
+
+    fn op_jr_o(&mut self, _: u8) -> Step {
+        let o = self.mem_ref8(self.reg.pc);
+        self.reg.add_pc(1);
+        self.reg.add8_pc(o);
+        Step::Run(12)
+    }
+
+    fn op_ld_a_ind_de(&mut self, _: u8) -> Step {
+        self.reg.a = self.mem_ref8(self.reg.de);
+        Step::Run(7)
+    }
+
+    fn op_rra(&mut self, _: u8) -> Step {
+        let res = (self.reg.a >> 1) | (self.reg.f.c_bit() << 7);
+        self.affect_flag_rotate_a(res, self.reg.a);
+        self.reg.a = res;
+        Step::Run(4)
+    }
+
+    fn op_jr_cond_o(&mut self, op: u8) -> Step {
+        let o = self.mem_ref8(self.reg.pc);
+        self.reg.add_pc(1);
+        if self.reg.f.cond((op >> 3) & 3) {
+            self.reg.add8_pc(o);
+            Step::Run(12)
+        } else {
+            Step::Run(7)
+        }
+    }
+
+    fn op_ld_ind_nn_hl(&mut self, _: u8) -> Step {
+        let nn = self.mem_ref16(self.reg.pc);
+        self.reg.add_pc(2);
+        self.mem_store16(nn, self.reg.hl);
+        Step::Run(16)
+    }
+
+    fn op_daa(&mut self, _: u8) -> Step {
+        let c = self.reg.f.is_c() || self.reg.a > 0x99;
+        let mut offset = 0x00u8;
+        if (self.reg.a & 0x0f) > 0x09 || self.reg.f.is_h() {
+            offset += 0x06u8;
+        }
+        if c || self.reg.a > 0x99 {
+            offset += 0x60u8;
+        }
+        let h = match (self.reg.f.is_n(), self.reg.f.is_h()) {
+            (true, false) => false,
+            (true, true) => (self.reg.a & 0x0f) < 0x06,
+            _ => (self.reg.a & 0x0f) > 0x09,
+        };
+        let a = if self.reg.f.is_n() {
+            self.reg.a.wrapping_sub(offset)
+        } else {
+            self.reg.a.wrapping_add(offset)
+        };
+        self.reg.a = a;
+        self.reg.f.set_wo_z(Flag::S_MASK | Flag::F53_MASK, a);
+        self.reg
+            .f
+            .set_wo_z(Flag::H_MASK | Flag::C_MASK, ((h as u8) << 4) | c as u8);
+        self.reg.f.zf = ZFlag::Acc(a);
+        self.reg.f.pv = PVFlag::Parity(a);
+        Step::Run(4)
+    }
+
+    fn op_ld_hl_ind_nn(&mut self, _: u8) -> Step {
+        let nn = self.mem_ref16(self.reg.pc);
+        self.reg.add_pc(2);
+        self.reg.hl = self.mem_ref16(nn);
+        Step::Run(16)
+    }
+
+    fn op_cpl(&mut self, _: u8) -> Step {
+        self.reg.a = !self.reg.a;
+        self.reg.f.set_wo_z(Flag::F53_MASK, self.reg.a);
+        self.reg
+            .f
+            .set_wo_z(Flag::H_MASK | Flag::N_MASK, Flag::H_MASK | Flag::N_MASK);
+        Step::Run(4)
+    }
+
+    fn op_ld_ind_nn_a(&mut self, _: u8) -> Step {
+        let nn = self.mem_ref16(self.reg.pc);
+        self.reg.add_pc(2);
+        self.mem_store8(nn, self.reg.a);
+        Step::Run(13)
+    }
+
+    fn op_scf(&mut self, _: u8) -> Step {
+        self.reg.f.set_wo_z(Flag::F53_MASK, self.reg.a);
+        self.reg
+            .f
+            .set_wo_z(Flag::H_MASK | Flag::N_MASK | Flag::C_MASK, Flag::C_MASK);
+        Step::Run(4)
+    }
+
+    fn op_ld_a_ind_nn(&mut self, _: u8) -> Step {
+        let nn = self.mem_ref16(self.reg.pc);
+        self.reg.add_pc(2);
+        self.reg.a = self.mem_ref8(nn);
+        Step::Run(13)
+    }
+
+    fn op_ccf(&mut self, _: u8) -> Step {
+        self.reg.f.set_wo_z(Flag::F53_MASK, self.reg.a);
+        let c = self.reg.f.is_c() as u8;
+        self.reg.f.set_wo_z(
+            Flag::H_MASK | Flag::N_MASK | Flag::C_MASK,
+            (c ^ 0x01) | (c << 4),
+        );
+        Step::Run(4)
+    }
+
+    fn op_ld_ind_hl_r(&mut self, op: u8) -> Step {
+        self.mem_store8(self.reg.hl, self.reg.reg8(op & 0x07));
+        Step::Run(7)
+    }
+
+    fn op_ld_r_ind_hl(&mut self, op: u8) -> Step {
+        self.reg
+            .set_reg8((op >> 3) & 0x07, self.mem_ref8(self.reg.hl));
+        Step::Run(7)
+    }
+
+    fn op_ld_r_r(&mut self, op: u8) -> Step {
+        let src = (op >> 3) & 0x07;
+        self.reg.set_reg8(op & 0x07, self.reg.reg8(src));
+        Step::Run(4)
+    }
+
+    fn op_add_a_ind_hl(&mut self, _: u8) -> Step {
+        let opr = self.mem_ref8(self.reg.hl);
+        let res = self.reg.a as u32 + opr as u32;
+        self.affect_flag_add8(self.reg.a, opr, res);
+        self.reg.a = res as u8;
+        Step::Run(7)
+    }
+
+    fn op_add_a_r(&mut self, op: u8) -> Step {
+        let opr = self.reg.reg8(op & 0x07);
+        let res = self.reg.a as u32 + opr as u32;
+        self.affect_flag_add8(self.reg.a, opr, res);
+        self.reg.a = res as u8;
+        Step::Run(4)
+    }
+
+    fn op_adc_a_ind_hl(&mut self, _: u8) -> Step {
+        let opr = self.mem_ref8(self.reg.hl);
+        let res = self.reg.a as u32 + opr as u32 + self.reg.f.c_bit() as u32;
+        self.affect_flag_add8(self.reg.a, opr, res);
+        self.reg.a = res as u8;
+        Step::Run(7)
+    }
+
+    fn op_adc_a_r(&mut self, op: u8) -> Step {
+        let opr = self.reg.reg8(op & 0x07);
+        let res = self.reg.a as u32 + opr as u32 + self.reg.f.c_bit() as u32;
+        self.affect_flag_add8(self.reg.a, opr, res);
+        self.reg.a = res as u8;
+        Step::Run(4)
+    }
+
+    fn op_sub_ind_hl(&mut self, _: u8) -> Step {
+        let opr = self.mem_ref8(self.reg.hl);
+        let res = (self.reg.a as u32).wrapping_sub(opr as u32);
+        self.affect_flag_sub8(self.reg.a, opr, res);
+        self.reg.a = res as u8;
+        Step::Run(7)
+    }
+
+    fn op_sub_r(&mut self, op: u8) -> Step {
+        let opr = self.reg.reg8(op & 0x07);
+        let res = (self.reg.a as u32).wrapping_sub(opr as u32);
+        self.affect_flag_sub8(self.reg.a, opr, res);
+        self.reg.a = res as u8;
+        Step::Run(4)
+    }
+
+    fn op_sbc_a_ind_hl(&mut self, _: u8) -> Step {
+        let opr = self.mem_ref8(self.reg.hl);
+        let res = (self.reg.a as u32)
+            .wrapping_sub(opr as u32)
+            .wrapping_sub(self.reg.f.c_bit() as u32);
+        self.affect_flag_sub8(self.reg.a, opr, res);
+        self.reg.a = res as u8;
+        Step::Run(7)
+    }
+
+    fn op_sbc_a_r(&mut self, op: u8) -> Step {
+        let opr = self.reg.reg8(op & 0x07);
+        let res = (self.reg.a as u32)
+            .wrapping_sub(opr as u32)
+            .wrapping_sub(self.reg.f.c_bit() as u32);
+        self.affect_flag_sub8(self.reg.a, opr, res);
+        self.reg.a = res as u8;
+        Step::Run(4)
+    }
+
+    fn op_and_ind_hl(&mut self, _: u8) -> Step {
+        let res = self.reg.a & self.mem_ref8(self.reg.hl);
+        self.affect_flag_and(res);
+        self.reg.a = res;
+        Step::Run(7)
+    }
+
+    fn op_and_r(&mut self, op: u8) -> Step {
+        let res = self.reg.a & self.reg.reg8(op & 0x07);
+        self.affect_flag_and(res);
+        self.reg.a = res;
+        Step::Run(4)
+    }
+
+    fn op_xor_ind_hl(&mut self, _: u8) -> Step {
+        let res = self.reg.a ^ self.mem_ref8(self.reg.hl);
+        self.affect_flag_or_xor(res);
+        self.reg.a = res;
+        Step::Run(7)
+    }
+
+    fn op_xor_r(&mut self, op: u8) -> Step {
+        let res = self.reg.a ^ self.reg.reg8(op & 0x07);
+        self.affect_flag_or_xor(res);
+        self.reg.a = res;
+        Step::Run(4)
+    }
+
+    fn op_or_ind_hl(&mut self, _: u8) -> Step {
+        let res = self.reg.a | self.mem_ref8(self.reg.hl);
+        self.affect_flag_or_xor(res);
+        self.reg.a = res;
+        Step::Run(7)
+    }
+
+    fn op_or_r(&mut self, op: u8) -> Step {
+        let res = self.reg.a | self.reg.reg8(op & 0x07);
+        self.affect_flag_or_xor(res);
+        self.reg.a = res;
+        Step::Run(4)
+    }
+
+    fn op_cp_ind_hl(&mut self, _: u8) -> Step {
+        let opr = self.mem_ref8(self.reg.hl);
+        let res = (self.reg.a as u32).wrapping_sub(opr as u32);
+        self.affect_flag_cp(self.reg.a, opr, res);
+        Step::Run(7)
+    }
+
+    fn op_cp_r(&mut self, op: u8) -> Step {
+        let opr = self.reg.reg8(op & 0x07);
+        let res = (self.reg.a as u32).wrapping_sub(opr as u32);
+        self.affect_flag_cp(self.reg.a, opr, res);
+        Step::Run(4)
+    }
+
     pub fn step(&mut self) -> Step {
-        match self.mem_ref8(self.reg.pc) {
-            0x00 => {
-                // nop
-                self.reg.add_pc(1);
-                Step::Run(4)
-            }
-            op if op & 0xcf == 0x01 => {
-                // ld rr,nn
-                self.reg.add_pc(1);
-                let nn = self.mem_ref16(self.reg.pc);
-                self.reg.add_pc(2);
-                self.reg.set_reg16((op >> 4) & 0x03, nn);
-                Step::Run(10)
-            }
-            0x02 => {
-                // ld (bc),a
-                self.reg.add_pc(1);
-                self.mem_store8(self.reg.bc, self.reg.a);
-                Step::Run(7)
-            }
-            op if op & 0xcf == 0x03 => {
-                // inc rr
-                self.reg.add_pc(1);
-                let index = (op >> 4) & 0x03;
-                self.reg
-                    .set_reg16(index, self.reg.reg16(index).wrapping_add(1));
-                Step::Run(6)
-            }
-            0x34 => {
-                // inc (hl)
-                self.reg.add_pc(1);
-                let opr = self.mem_ref8(self.reg.hl);
-                let res = opr as u32 + 1;
-                self.affect_flag_inc8(opr, res);
-                self.mem_store8(self.reg.hl, res as u8);
-                Step::Run(11)
-            }
-            op if op & 0xc7 == 0x04 => {
-                // inc r
-                self.reg.add_pc(1);
-                let index = (op >> 3) & 0x07;
-                let opr = self.reg.reg8(index);
-                let res = opr as u32 + 1;
-                self.affect_flag_inc8(opr, res);
-                self.reg.set_reg8(index, res as u8);
-                Step::Run(4)
-            }
-            0x35 => {
-                // dec (hl)
-                self.reg.add_pc(1);
-                let opr = self.mem_ref8(self.reg.hl);
-                let res = (opr as u32).wrapping_sub(1);
-                self.affect_flag_dec8(opr, res);
-                self.mem_store8(self.reg.hl, res as u8);
-                Step::Run(11)
-            }
-            op if op & 0xc7 == 0x05 => {
-                // dec r
-                self.reg.add_pc(1);
-                let index = (op >> 3) & 0x07;
-                let opr = self.reg.reg8(index);
-                let res = (opr as u32).wrapping_sub(1);
-                self.affect_flag_dec8(opr, res);
-                self.reg.set_reg8(index, res as u8);
-                Step::Run(4)
-            }
-            0x36 => {
-                // ld (hl),n
-                self.reg.add_pc(1);
-                let n = self.mem_ref8(self.reg.pc);
-                self.mem_store8(self.reg.hl, n);
-                self.reg.add_pc(1);
-                Step::Run(10)
-            }
-            op if op & 0xc7 == 0x06 => {
-                // ld r,n
-                self.reg.add_pc(1);
-                let n = self.mem_ref8(self.reg.pc);
-                self.reg.set_reg8((op >> 3) & 0x07, n);
-                self.reg.add_pc(1);
-                Step::Run(7)
-            }
-            0x07 => {
-                // rlca
-                self.reg.add_pc(1);
-                let res = (self.reg.a << 1) | (self.reg.a >> 7);
-                self.affect_flag_rotate_a(res, self.reg.a >> 7);
-                self.reg.a = res;
-                Step::Run(4)
-            }
-            0x08 => {
-                // ex af,af'
-                self.reg.add_pc(1);
-                let a = self.reg.a;
-                let f = self.reg.f.as_u8();
-                self.reg.a = self.reg.af_p.high();
-                self.reg.f.from_u8(self.reg.af_p.low());
-                self.reg.af_p = u16::from_pair(a, f);
-                Step::Run(4)
-            }
-            op if op & 0xcf == 0x09 => {
-                // add hl,rr
-                self.reg.add_pc(1);
-                let opr = self.reg.reg16((op >> 4) & 0x03);
-                let res = self.reg.hl as u32 + opr as u32;
-                self.affect_flag_add16(self.reg.hl, opr, res);
-                self.reg.hl = res as u16;
-                Step::Run(11)
-            }
-            0x0a => {
-                // ld a,(bc)
-                self.reg.add_pc(1);
-                self.reg.a = self.mem_ref8(self.reg.bc);
-                Step::Run(7)
-            }
-            op if op & 0xcf == 0x0b => {
-                // dec rr
-                self.reg.add_pc(1);
-                let index = (op >> 4) & 0x03;
-                self.reg
-                    .set_reg16(index, self.reg.reg16(index).wrapping_sub(1));
-                Step::Run(6)
-            }
-            0x0f => {
-                // rrca
-                self.reg.add_pc(1);
-                let res = (self.reg.a >> 1) | (self.reg.a << 7);
-                self.affect_flag_rotate_a(res, self.reg.a);
-                self.reg.a = res;
-                Step::Run(4)
-            }
-            0x10 => {
-                // djnz o
-                self.reg.add_pc(1);
-                let o = self.mem_ref8(self.reg.pc);
-                self.reg.add_pc(1);
-                let x = self.reg.b().wrapping_sub(1);
-                self.reg.set_b(x);
-                if x == 0x00u8 {
-                    Step::Run(8)
-                } else {
-                    self.reg.add8_pc(o);
-                    Step::Run(13)
-                }
-            }
-            0x12 => {
-                // ld (de),a
-                self.reg.add_pc(1);
-                self.mem_store8(self.reg.de, self.reg.a);
-                Step::Run(7)
-            }
-            0x17 => {
-                // rla
-                self.reg.add_pc(1);
-                let res = (self.reg.a << 1) | self.reg.f.c_bit();
-                self.affect_flag_rotate_a(res, self.reg.a >> 7);
-                self.reg.a = res;
-                Step::Run(4)
-            }
-            0x18 => {
-                // jr o
-                self.reg.add_pc(1);
-                let o = self.mem_ref8(self.reg.pc);
-                self.reg.add_pc(1);
-                self.reg.add8_pc(o);
-                Step::Run(12)
-            }
-            0x1a => {
-                // ld a,(de)
-                self.reg.add_pc(1);
-                self.reg.a = self.mem_ref8(self.reg.de);
-                Step::Run(7)
-            }
-            0x1f => {
-                // rra
-                self.reg.add_pc(1);
-                let res = (self.reg.a >> 1) | (self.reg.f.c_bit() << 7);
-                self.affect_flag_rotate_a(res, self.reg.a);
-                self.reg.a = res;
-                Step::Run(4)
-            }
-            op if op & 0xe7 == 0x20 => {
-                // jr cond,o
-                self.reg.add_pc(1);
-                let o = self.mem_ref8(self.reg.pc);
-                self.reg.add_pc(1);
-                if self.reg.f.cond((op >> 3) & 3) {
-                    self.reg.add8_pc(o);
-                    Step::Run(12)
-                } else {
-                    Step::Run(7)
-                }
-            }
-            0x22 => {
-                // ld (nn),hl
-                self.reg.add_pc(1);
-                let nn = self.mem_ref16(self.reg.pc);
-                self.reg.add_pc(2);
-                self.mem_store16(nn, self.reg.hl);
-                Step::Run(16)
-            }
-            0x27 => {
-                // daa
-                self.reg.add_pc(1);
-                let c = self.reg.f.is_c() || self.reg.a > 0x99;
-                let mut offset = 0x00u8;
-                if (self.reg.a & 0x0f) > 0x09 || self.reg.f.is_h() {
-                    offset += 0x06u8;
-                }
-                if c || self.reg.a > 0x99 {
-                    offset += 0x60u8;
-                }
-                let h = match (self.reg.f.is_n(), self.reg.f.is_h()) {
-                    (true, false) => false,
-                    (true, true) => (self.reg.a & 0x0f) < 0x06,
-                    _ => (self.reg.a & 0x0f) > 0x09,
-                };
-                let a = if self.reg.f.is_n() {
-                    self.reg.a.wrapping_sub(offset)
-                } else {
-                    self.reg.a.wrapping_add(offset)
-                };
-                self.reg.a = a;
-                self.reg.f.set_wo_z(Flag::S_MASK | Flag::F53_MASK, a);
-                self.reg
-                    .f
-                    .set_wo_z(Flag::H_MASK | Flag::C_MASK, ((h as u8) << 4) | c as u8);
-                self.reg.f.zf = ZFlag::Acc(a);
-                self.reg.f.pv = PVFlag::Parity(a);
-                Step::Run(4)
-            }
-            0x2a => {
-                // ld hl,(nn)
-                self.reg.add_pc(1);
-                let nn = self.mem_ref16(self.reg.pc);
-                self.reg.add_pc(2);
-                self.reg.hl = self.mem_ref16(nn);
-                Step::Run(16)
-            }
-            0x2f => {
-                // cpl
-                self.reg.a = !self.reg.a;
-                self.reg.f.set_wo_z(Flag::F53_MASK, self.reg.a);
-                self.reg
-                    .f
-                    .set_wo_z(Flag::H_MASK | Flag::N_MASK, Flag::H_MASK | Flag::N_MASK);
-                Step::Run(4)
-            }
-            0x32 => {
-                // ld (nn),a
-                self.reg.add_pc(1);
-                let nn = self.mem_ref16(self.reg.pc);
-                self.reg.add_pc(2);
-                self.mem_store8(nn, self.reg.a);
-                Step::Run(13)
-            }
-            0x37 => {
-                // scf
-                self.reg.add_pc(1);
-                self.reg.f.set_wo_z(Flag::F53_MASK, self.reg.a);
-                self.reg
-                    .f
-                    .set_wo_z(Flag::H_MASK | Flag::N_MASK | Flag::C_MASK, Flag::C_MASK);
-                Step::Run(4)
-            }
-            0x3a => {
-                // ld a,(nn)
-                self.reg.add_pc(1);
-                let nn = self.mem_ref16(self.reg.pc);
-                self.reg.add_pc(2);
-                self.reg.a = self.mem_ref8(nn);
-                Step::Run(13)
-            }
-            0x3f => {
-                // ccf
-                self.reg.add_pc(1);
-                self.reg.f.set_wo_z(Flag::F53_MASK, self.reg.a);
-                let c = self.reg.f.is_c() as u8;
-                self.reg.f.set_wo_z(
-                    Flag::H_MASK | Flag::N_MASK | Flag::C_MASK,
-                    (c ^ 0x01) | (c << 4),
-                );
-                Step::Run(4)
-            }
+        let op = self.mem_ref8(self.reg.pc);
+        let mut run_op = |f: fn(&mut Self, u8) -> Step| {
+            self.reg.add_pc(1);
+            f(self, op)
+        };
+        match op {
+            0x00 => run_op(Self::op_nop),
+            op if op & 0xcf == 0x01 => run_op(Self::op_ld_rr_nn),
+            0x02 => run_op(Self::op_ld_ind_bc_a),
+            op if op & 0xcf == 0x03 => run_op(Self::op_inc_rr),
+            0x34 => run_op(Self::op_inc_ind_hl),
+            op if op & 0xc7 == 0x04 => run_op(Self::op_inc_r),
+            0x35 => run_op(Self::op_dec_ind_hl),
+            op if op & 0xc7 == 0x05 => run_op(Self::op_dec_r),
+            0x36 => run_op(Self::op_ld_ind_hl_n),
+            op if op & 0xc7 == 0x06 => run_op(Self::op_ld_r_n),
+            0x07 => run_op(Self::op_rlca),
+            0x08 => run_op(Self::op_ex_af_af_p),
+            op if op & 0xcf == 0x09 => run_op(Self::op_add_hl_rr),
+            0x0a => run_op(Self::op_ld_a_ind_bc),
+            op if op & 0xcf == 0x0b => run_op(Self::op_dec_rr),
+            0x0f => run_op(Self::op_rrca),
+            0x10 => run_op(Self::op_djnz_o),
+            0x12 => run_op(Self::op_ld_ind_de_a),
+            0x17 => run_op(Self::op_rla),
+            0x18 => run_op(Self::op_jr_o),
+            0x1a => run_op(Self::op_ld_a_ind_de),
+            0x1f => run_op(Self::op_rra),
+            op if op & 0xe7 == 0x20 => run_op(Self::op_jr_cond_o),
+            0x22 => run_op(Self::op_ld_ind_nn_hl),
+            0x27 => run_op(Self::op_daa),
+            0x2a => run_op(Self::op_ld_hl_ind_nn),
+            0x2f => run_op(Self::op_cpl),
+            0x32 => run_op(Self::op_ld_ind_nn_a),
+            0x37 => run_op(Self::op_scf),
+            0x3a => run_op(Self::op_ld_a_ind_nn),
+            0x3f => run_op(Self::op_ccf),
             0x76 => Step::Halt,
-            op if op & 0xf8 == 0x70 => {
-                // ld (hl),r
-                self.reg.add_pc(1);
-                self.mem_store8(self.reg.hl, self.reg.reg8(op & 0x07));
-                Step::Run(7)
-            }
-            op if op & 0xc7 == 0x46 => {
-                // ld r,(hl)
-                self.reg.add_pc(1);
-                self.reg
-                    .set_reg8((op >> 3) & 0x07, self.mem_ref8(self.reg.hl));
-                Step::Run(7)
-            }
-            op if op & 0xc0 == 0x40 => {
-                // ld r,r'
-                self.reg.add_pc(1);
-                let src = (op >> 3) & 0x07;
-                self.reg.set_reg8(op & 0x07, self.reg.reg8(src));
-                Step::Run(4)
-            }
-            0x86 => {
-                // add a,(hl)
-                self.reg.add_pc(1);
-                let opr = self.mem_ref8(self.reg.hl);
-                let res = self.reg.a as u32 + opr as u32;
-                self.affect_flag_add8(self.reg.a, opr, res);
-                self.reg.a = res as u8;
-                Step::Run(7)
-            }
-            op if op & 0xf8 == 0x80 => {
-                // add a,r
-                self.reg.add_pc(1);
-                let opr = self.reg.reg8(op & 0x07);
-                let res = self.reg.a as u32 + opr as u32;
-                self.affect_flag_add8(self.reg.a, opr, res);
-                self.reg.a = res as u8;
-                Step::Run(4)
-            }
-            0x8e => {
-                // adc a,(hl)
-                self.reg.add_pc(1);
-                let opr = self.mem_ref8(self.reg.hl);
-                let res = self.reg.a as u32 + opr as u32 + self.reg.f.c_bit() as u32;
-                self.affect_flag_add8(self.reg.a, opr, res);
-                self.reg.a = res as u8;
-                Step::Run(7)
-            }
-            op if op & 0xf8 == 0x88 => {
-                // adc a,r
-                self.reg.add_pc(1);
-                let opr = self.reg.reg8(op & 0x07);
-                let res = self.reg.a as u32 + opr as u32 + self.reg.f.c_bit() as u32;
-                self.affect_flag_add8(self.reg.a, opr, res);
-                self.reg.a = res as u8;
-                Step::Run(4)
-            }
-            0x96 => {
-                // sub (hl)
-                self.reg.add_pc(1);
-                let opr = self.mem_ref8(self.reg.hl);
-                let res = (self.reg.a as u32).wrapping_sub(opr as u32);
-                self.affect_flag_sub8(self.reg.a, opr, res);
-                self.reg.a = res as u8;
-                Step::Run(7)
-            }
-            op if op & 0xf8 == 0x90 => {
-                // sub r
-                self.reg.add_pc(1);
-                let opr = self.reg.reg8(op & 0x07);
-                let res = (self.reg.a as u32).wrapping_sub(opr as u32);
-                self.affect_flag_sub8(self.reg.a, opr, res);
-                self.reg.a = res as u8;
-                Step::Run(4)
-            }
-            0x9e => {
-                // sbc a,(hl)
-                self.reg.add_pc(1);
-                let opr = self.mem_ref8(self.reg.hl);
-                let res = (self.reg.a as u32)
-                    .wrapping_sub(opr as u32)
-                    .wrapping_sub(self.reg.f.c_bit() as u32);
-                self.affect_flag_sub8(self.reg.a, opr, res);
-                self.reg.a = res as u8;
-                Step::Run(7)
-            }
-            op if op & 0xf8 == 0x98 => {
-                // sbc a,r
-                self.reg.add_pc(1);
-                let opr = self.reg.reg8(op & 0x07);
-                let res = (self.reg.a as u32)
-                    .wrapping_sub(opr as u32)
-                    .wrapping_sub(self.reg.f.c_bit() as u32);
-                self.affect_flag_sub8(self.reg.a, opr, res);
-                self.reg.a = res as u8;
-                Step::Run(4)
-            }
-            0xa6 => {
-                // and (hl)
-                self.reg.add_pc(1);
-                let res = self.reg.a & self.mem_ref8(self.reg.hl);
-                self.affect_flag_and(res);
-                self.reg.a = res;
-                Step::Run(7)
-            }
-            op if op & 0xf8 == 0xa0 => {
-                // and r
-                self.reg.add_pc(1);
-                let res = self.reg.a & self.reg.reg8(op & 0x07);
-                self.affect_flag_and(res);
-                self.reg.a = res;
-                Step::Run(4)
-            }
-            0xae => {
-                // xor (hl)
-                self.reg.add_pc(1);
-                let res = self.reg.a ^ self.mem_ref8(self.reg.hl);
-                self.affect_flag_or_xor(res);
-                self.reg.a = res;
-                Step::Run(7)
-            }
-            op if op & 0xf8 == 0xa8 => {
-                // xor r
-                self.reg.add_pc(1);
-                let res = self.reg.a ^ self.reg.reg8(op & 0x07);
-                self.affect_flag_or_xor(res);
-                self.reg.a = res;
-                Step::Run(4)
-            }
+            op if op & 0xf8 == 0x70 => run_op(Self::op_ld_ind_hl_r),
+            op if op & 0xc7 == 0x46 => run_op(Self::op_ld_r_ind_hl),
+            op if op & 0xc0 == 0x40 => run_op(Self::op_ld_r_r),
+            0x86 => run_op(Self::op_add_a_ind_hl),
+            op if op & 0xf8 == 0x80 => run_op(Self::op_add_a_r),
+            0x8e => run_op(Self::op_adc_a_ind_hl),
+            op if op & 0xf8 == 0x88 => run_op(Self::op_adc_a_r),
+            0x96 => run_op(Self::op_sub_ind_hl),
+            op if op & 0xf8 == 0x90 => run_op(Self::op_sub_r),
+            0x9e => run_op(Self::op_sbc_a_ind_hl),
+            op if op & 0xf8 == 0x98 => run_op(Self::op_sbc_a_r),
+            0xa6 => run_op(Self::op_and_ind_hl),
+            op if op & 0xf8 == 0xa0 => run_op(Self::op_and_r),
+            0xae => run_op(Self::op_xor_ind_hl),
+            op if op & 0xf8 == 0xa8 => run_op(Self::op_xor_r),
+            0xb6 => run_op(Self::op_or_ind_hl),
+            op if op & 0xf8 == 0xb0 => run_op(Self::op_or_r),
+            0xbe => run_op(Self::op_cp_ind_hl),
+            op if op & 0xf8 == 0xb8 => run_op(Self::op_cp_r),
             _ => Step::IllegalInstruction,
         }
     }
