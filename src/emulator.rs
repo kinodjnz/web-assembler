@@ -880,6 +880,15 @@ impl Emulator {
         Step::Run(11)
     }
 
+    fn op_add_a_n(&mut self, _: u8) -> Step {
+        let opr = self.mem_ref8(self.reg.pc);
+        self.reg.add_pc(1);
+        let res = self.reg.a as u32 + opr as u32;
+        self.affect_flag_add8(self.reg.a, opr, res);
+        self.reg.a = res as u8;
+        Step::Run(7)
+    }
+
     pub fn step(&mut self) -> Step {
         let op = self.mem_ref8(self.reg.pc);
         let mut run_op = |f: fn(&mut Self, u8) -> Step| {
@@ -944,6 +953,7 @@ impl Emulator {
             0xc3 => run_op(Self::op_jp_nn),
             op if op & 0xc7 == 0xc4 => run_op(Self::op_call_cond_nn),
             op if op & 0xcf == 0xc5 => run_op(Self::op_push_rr),
+            0xc6 => run_op(Self::op_add_a_n),
             _ => Step::IllegalInstruction,
         }
     }
