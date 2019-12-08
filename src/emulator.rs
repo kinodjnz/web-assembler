@@ -816,8 +816,7 @@ impl Emulator {
     fn op_ret_cond(&mut self, op: u8) -> Step {
         if self.reg.f.cond((op >> 3) & 0x07) {
             self.reg.sp = self.reg.sp.wrapping_add(2);
-            let pc = self.mem_ref16(self.reg.sp);
-            self.reg.pc = pc;
+            self.reg.pc = self.mem_ref16(self.reg.sp);
             Step::Run(11)
         } else {
             Step::Run(5)
@@ -837,6 +836,15 @@ impl Emulator {
             }
             i => panic!("unknown register: {}", i),
         };
+        Step::Run(10)
+    }
+
+    fn op_jp_cond_nn(&mut self, op: u8) -> Step {
+        if self.reg.f.cond((op >> 3) & 0x07) {
+            self.reg.pc = self.mem_ref16(self.reg.pc);
+        } else {
+            self.reg.add_pc(2);
+        }
         Step::Run(10)
     }
 
@@ -900,6 +908,7 @@ impl Emulator {
             op if op & 0xf8 == 0xb8 => run_op(Self::op_cp_r),
             op if op & 0xc7 == 0xc0 => run_op(Self::op_ret_cond),
             op if op & 0xcf == 0xc1 => run_op(Self::op_pop_rr),
+            op if op & 0xc7 == 0xc2 => run_op(Self::op_jp_cond_nn),
             _ => Step::IllegalInstruction,
         }
     }
