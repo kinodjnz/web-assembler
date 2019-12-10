@@ -1194,6 +1194,28 @@ impl Emulator {
         Step::Run(20)
     }
 
+    fn op_neg(&mut self, _: u8) -> Step {
+        let opr = self.reg.a;
+        let res = 0u32.wrapping_sub(opr as u32);
+        self.affect_flag_sub8(0u8, opr, res);
+        self.reg.a = res as u8;
+        Step::Run(8)
+    }
+
+    fn op_reti(&mut self, _: u8) -> Step {
+        // TODO unimplemented
+        self.reg.pc = self.mem_ref16(self.reg.sp);
+        self.reg.sp = self.reg.sp.wrapping_add(2);
+        Step::Run(14)
+    }
+
+    fn op_retn(&mut self, _: u8) -> Step {
+        // TODO unimplemented
+        self.reg.pc = self.mem_ref16(self.reg.sp);
+        self.reg.sp = self.reg.sp.wrapping_add(2);
+        Step::Run(14)
+    }
+
     fn op_extended(&mut self, _: u8) -> Step {
         let op = self.mem_ref8(self.reg.pc);
         let mut run_op = |f: fn(&mut Self, u8) -> Step| self.run_op(op, f);
@@ -1204,6 +1226,9 @@ impl Emulator {
             op if op & 0xc7 == 0x41 => run_op(Self::op_out_ind_c_r),
             op if op & 0xcf == 0x42 => run_op(Self::op_sbc_hl_rr),
             op if op & 0xcf == 0x43 => run_op(Self::op_ld_ind_nn_rr),
+            op if op & 0xc7 == 0x44 => run_op(Self::op_neg),
+            0x4d => run_op(Self::op_reti),
+            op if op & 0xc7 == 0x45 => run_op(Self::op_retn),
             _ => Step::IllegalInstruction,
         }
     }
