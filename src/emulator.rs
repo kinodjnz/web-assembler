@@ -326,7 +326,7 @@ impl Emulator {
     }
 
     pub fn mem_ref16(&self, addr: u16) -> u16 {
-        self.mem_ref8(addr) as u16 | ((self.mem_ref8(addr + 1) as u16) << 8)
+        self.mem_ref8(addr) as u16 | ((self.mem_ref8(addr.wrapping_add(1)) as u16) << 8)
     }
 
     pub fn mem_store8(&mut self, addr: u16, value: u8) {
@@ -815,8 +815,8 @@ impl Emulator {
 
     fn op_ret_cond(&mut self, op: u8) -> Step {
         if self.reg.f.cond((op >> 3) & 0x07) {
-            self.reg.sp = self.reg.sp.wrapping_add(2);
             self.reg.pc = self.mem_ref16(self.reg.sp);
+            self.reg.sp = self.reg.sp.wrapping_add(2);
             Step::Run(11)
         } else {
             Step::Run(5)
@@ -857,8 +857,8 @@ impl Emulator {
         if self.reg.f.cond((op >> 3) & 0x07) {
             let pc = self.mem_ref16(self.reg.pc);
             self.reg.add_pc(2);
-            self.mem_store16(self.reg.sp, self.reg.pc);
             self.reg.sp = self.reg.sp.wrapping_sub(2);
+            self.mem_store16(self.reg.sp, self.reg.pc);
             self.reg.pc = pc;
             Step::Run(17)
         } else {
@@ -890,23 +890,23 @@ impl Emulator {
     }
 
     fn op_rst_n(&mut self, op: u8) -> Step {
-        self.mem_store16(self.reg.sp, self.reg.pc);
         self.reg.sp = self.reg.sp.wrapping_sub(2);
+        self.mem_store16(self.reg.sp, self.reg.pc);
         self.reg.pc = (op & 0x38u8) as u16;
         Step::Run(11)
     }
 
     fn op_ret(&mut self, _: u8) -> Step {
-        self.reg.sp = self.reg.sp.wrapping_add(2);
         self.reg.pc = self.mem_ref16(self.reg.sp);
+        self.reg.sp = self.reg.sp.wrapping_add(2);
         Step::Run(10)
     }
 
     fn op_call_nn(&mut self, _: u8) -> Step {
         let pc = self.mem_ref16(self.reg.pc);
         self.reg.add_pc(2);
-        self.mem_store16(self.reg.sp, self.reg.pc);
         self.reg.sp = self.reg.sp.wrapping_sub(2);
+        self.mem_store16(self.reg.sp, self.reg.pc);
         self.reg.pc = pc;
         Step::Run(17)
     }
@@ -946,6 +946,33 @@ impl Emulator {
         // TODO unimplemented
         self.reg.a = 0u8;
         Step::Run(11)
+    }
+
+    fn op_sbc_a_n(&mut self, _: u8) -> Step {
+        let opr = self.mem_ref8(self.reg.pc);
+        self.reg.add_pc(1);
+        let res = (self.reg.a as u32)
+            .wrapping_sub(opr as u32)
+            .wrapping_sub(self.reg.f.c_bit() as u32);
+        self.affect_flag_sub8(self.reg.a, opr, res);
+        self.reg.a = res as u8;
+        Step::Run(7)
+    }
+
+    fn op_ex_ind_sp_hl(&mut self, _: u8) -> Step {
+        let old_mem = self.mem_ref16(self.reg.sp);
+        self.mem_store16(self.reg.sp, self.reg.hl);
+        self.reg.hl = old_mem;
+        Step::Run(19)
+    }
+
+    fn op_and_n(&mut self, _: u8) -> Step {
+        let opr = self.mem_ref8(self.reg.pc);
+        self.reg.add_pc(1);
+        let res = self.reg.a & opr;
+        self.affect_flag_and(res);
+        self.reg.a = res;
+        Step::Run(7)
     }
 
     pub fn step(&mut self) -> Step {
@@ -1022,12 +1049,21 @@ impl Emulator {
             0xd6 => run_op(Self::op_sub_n),
             0xd9 => run_op(Self::op_exx),
             0xdb => run_op(Self::op_in_a_ind_n),
+            0xdd => run_op(Self::op_ix),
+            0xde => run_op(Self::op_sbc_a_n),
+            0xe3 => run_op(Self::op_ex_ind_sp_hl),
+            0xe6 => run_op(Self::op_and_n),
             _ => Step::IllegalInstruction,
         }
     }
 
     fn op_bits(&mut self, _: u8) -> Step {
         // TODO bits instructions
+        Step::IllegalInstruction
+    }
+
+    fn op_ix(&mut self, _: u8) -> Step {
+        // TODO ix instructions
         Step::IllegalInstruction
     }
 }
