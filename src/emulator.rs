@@ -419,6 +419,20 @@ impl Emulator {
         self.reg.f.pv = PVFlag::Overflow(h ^ (cf << 7));
     }
 
+    fn affect_flag_in(&mut self, res: u8) {
+        self.reg.f.set_wo_z(
+            Flag::S_MASK | Flag::F53_MASK | Flag::H_MASK | Flag::N_MASK,
+            res & (Flag::S_MASK | Flag::F53_MASK),
+        );
+        self.reg.f.zf = ZFlag::Acc(res);
+        self.reg.f.pv = PVFlag::Parity(res);
+    }
+
+    fn run_op(&mut self, op: u8, f: fn(&mut Self, u8) -> Step) -> Step {
+        self.reg.add_pc(1);
+        f(self, op)
+    }
+
     fn op_nop(&mut self, _: u8) -> Step {
         Step::Run(4)
     }
@@ -1028,10 +1042,7 @@ impl Emulator {
 
     pub fn step(&mut self) -> Step {
         let op = self.mem_ref8(self.reg.pc);
-        let mut run_op = |f: fn(&mut Self, u8) -> Step| {
-            self.reg.add_pc(1);
-            f(self, op)
-        };
+        let mut run_op = |f: fn(&mut Self, u8) -> Step| self.run_op(op, f);
         match op {
             0x00 => run_op(Self::op_nop),
             op if op & 0xcf == 0x01 => run_op(Self::op_ld_rr_nn),
@@ -1133,8 +1144,40 @@ impl Emulator {
         Step::IllegalInstruction
     }
 
+    fn op_in_f_ind_c(&mut self, _: u8) -> Step {
+        // TODO unimplemented
+        let res = 0x00u8;
+        self.affect_flag_in(res);
+        Step::Run(12)
+    }
+
+    fn op_in_r_ind_c(&mut self, op: u8) -> Step {
+        // TODO unimplemented
+        let res = 0x00u8;
+        self.affect_flag_in(res);
+        self.reg.set_reg8((op >> 3) & 7, res);
+        Step::Run(12)
+    }
+
+    fn op_out_ind_c_zero(&mut self, _: u8) -> Step {
+        // TODO unimplemented
+        Step::Run(12)
+    }
+
+    fn op_out_ind_c_r(&mut self, _: u8) -> Step {
+        // TODO unimplemented
+        Step::Run(12)
+    }
+
     fn op_extended(&mut self, _: u8) -> Step {
-        // todo extended instructions
-        Step::IllegalInstruction
+        let op = self.mem_ref8(self.reg.pc);
+        let mut run_op = |f: fn(&mut Self, u8) -> Step| self.run_op(op, f);
+        match op {
+            0x70 => run_op(Self::op_in_f_ind_c),
+            op if op & 0xc7 == 0x40 => run_op(Self::op_in_r_ind_c),
+            0x71 => run_op(Self::op_out_ind_c_zero),
+            op if op & 0xc7 == 0x41 => run_op(Self::op_out_ind_c_r),
+            _ => Step::IllegalInstruction,
+        }
     }
 }
