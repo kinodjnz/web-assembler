@@ -994,6 +994,38 @@ impl Emulator {
         Step::Run(7)
     }
 
+    fn op_di(&mut self, _: u8) -> Step {
+        // TODO unimplemented
+        Step::Run(4)
+    }
+
+    fn op_or_n(&mut self, _: u8) -> Step {
+        let opr = self.mem_ref8(self.reg.pc);
+        self.reg.add_pc(1);
+        let res = self.reg.a | opr;
+        self.affect_flag_or_xor(res);
+        self.reg.a = res;
+        Step::Run(7)
+    }
+
+    fn op_ld_sp_hl(&mut self, _: u8) -> Step {
+        self.reg.sp = self.reg.hl;
+        Step::Run(6)
+    }
+
+    fn op_ei(&mut self, _: u8) -> Step {
+        // TODO unimplemented
+        Step::Run(4)
+    }
+
+    fn op_cp_n(&mut self, _: u8) -> Step {
+        let opr = self.mem_ref8(self.reg.pc);
+        self.reg.add_pc(1);
+        let res = (self.reg.a as u32).wrapping_sub(opr as u32);
+        self.affect_flag_cp(self.reg.a, opr, res);
+        Step::Run(7)
+    }
+
     pub fn step(&mut self) -> Step {
         let op = self.mem_ref8(self.reg.pc);
         let mut run_op = |f: fn(&mut Self, u8) -> Step| {
@@ -1076,6 +1108,12 @@ impl Emulator {
             0xeb => run_op(Self::op_ex_de_hl),
             0xed => run_op(Self::op_extended),
             0xee => run_op(Self::op_xor_n),
+            0xf3 => run_op(Self::op_di),
+            0xf6 => run_op(Self::op_or_n),
+            0xf9 => run_op(Self::op_ld_sp_hl),
+            0xfb => run_op(Self::op_ei),
+            0xfd => run_op(Self::op_iy),
+            0xfe => run_op(Self::op_cp_n),
             _ => Step::IllegalInstruction,
         }
     }
@@ -1087,6 +1125,11 @@ impl Emulator {
 
     fn op_ix(&mut self, _: u8) -> Step {
         // TODO ix instructions
+        Step::IllegalInstruction
+    }
+
+    fn op_iy(&mut self, _: u8) -> Step {
+        // TODO iy instructions
         Step::IllegalInstruction
     }
 
