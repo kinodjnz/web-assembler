@@ -369,6 +369,14 @@ impl Emulator {
     }
 
     fn affect_flag_add16(&mut self, opr1: u16, opr2: u16, res: u32) {
+        self.affect_flag_add_sub16(opr1, opr2, res, NFlag::Add)
+    }
+
+    fn affect_flag_sub16(&mut self, opr1: u16, opr2: u16, res: u32) {
+        self.affect_flag_add_sub16(opr1, opr2, res, NFlag::Sub)
+    }
+
+    fn affect_flag_add_sub16(&mut self, opr1: u16, opr2: u16, res: u32, n: NFlag) {
         let resh = (res >> 8) as u8;
         let cf = (res >> 16) as u8;
         let h = (opr1 >> 8) as u8 ^ (opr2 >> 8) as u8 ^ resh;
@@ -376,7 +384,7 @@ impl Emulator {
         self.reg.f.set_wo_z(Flag::H_MASK, h);
         self.reg
             .f
-            .set_wo_z(Flag::N_MASK | Flag::C_MASK, NFlag::Add.as_bit() | cf);
+            .set_wo_z(Flag::N_MASK | Flag::C_MASK, n.as_bit() | cf);
     }
 
     fn affect_flag_rotate_a(&mut self, res: u8, cf: u8) {
@@ -1169,6 +1177,23 @@ impl Emulator {
         Step::Run(12)
     }
 
+    fn op_sbc_hl_rr(&mut self, op: u8) -> Step {
+        let opr = self.reg.reg16((op >> 4) & 0x03);
+        let res = (self.reg.hl as u32)
+            .wrapping_sub(opr as u32)
+            .wrapping_sub(self.reg.f.c_bit() as u32);
+        self.affect_flag_sub16(self.reg.hl, opr, res);
+        self.reg.hl = res as u16;
+        Step::Run(15)
+    }
+
+    fn op_ld_ind_nn_rr(&mut self, op: u8) -> Step {
+        let nn = self.mem_ref16(self.reg.pc);
+        self.reg.add_pc(2);
+        self.mem_store16(nn, self.reg.reg16((op >> 4) & 0x03));
+        Step::Run(20)
+    }
+
     fn op_extended(&mut self, _: u8) -> Step {
         let op = self.mem_ref8(self.reg.pc);
         let mut run_op = |f: fn(&mut Self, u8) -> Step| self.run_op(op, f);
@@ -1177,6 +1202,8 @@ impl Emulator {
             op if op & 0xc7 == 0x40 => run_op(Self::op_in_r_ind_c),
             0x71 => run_op(Self::op_out_ind_c_zero),
             op if op & 0xc7 == 0x41 => run_op(Self::op_out_ind_c_r),
+            op if op & 0xcf == 0x42 => run_op(Self::op_sbc_hl_rr),
+            op if op & 0xcf == 0x43 => run_op(Self::op_ld_ind_nn_rr),
             _ => Step::IllegalInstruction,
         }
     }
