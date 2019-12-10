@@ -921,8 +921,30 @@ impl Emulator {
     }
 
     fn op_out_ind_n_a(&mut self, _: u8) -> Step {
-        // TODO
+        // TODO unimplemented
         self.reg.add_pc(1);
+        Step::Run(11)
+    }
+
+    fn op_sub_n(&mut self, _: u8) -> Step {
+        let opr = self.mem_ref8(self.reg.pc);
+        self.reg.add_pc(1);
+        let res = (self.reg.a as u32).wrapping_sub(opr as u32);
+        self.affect_flag_sub8(self.reg.a, opr, res);
+        self.reg.a = res as u8;
+        Step::Run(7)
+    }
+
+    fn op_exx(&mut self, _: u8) -> Step {
+        std::mem::swap(&mut self.reg.bc, &mut self.reg.bc_p);
+        std::mem::swap(&mut self.reg.de, &mut self.reg.de_p);
+        std::mem::swap(&mut self.reg.hl, &mut self.reg.hl_p);
+        Step::Run(4)
+    }
+
+    fn op_in_a_ind_n(&mut self, _: u8) -> Step {
+        // TODO unimplemented
+        self.reg.a = 0u8;
         Step::Run(11)
     }
 
@@ -997,6 +1019,9 @@ impl Emulator {
             0xcd => run_op(Self::op_call_nn),
             0xce => run_op(Self::op_adc_a_n),
             0xd3 => run_op(Self::op_out_ind_n_a),
+            0xd6 => run_op(Self::op_sub_n),
+            0xd9 => run_op(Self::op_exx),
+            0xdb => run_op(Self::op_in_a_ind_n),
             _ => Step::IllegalInstruction,
         }
     }
