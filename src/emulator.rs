@@ -975,6 +975,25 @@ impl Emulator {
         Step::Run(7)
     }
 
+    fn op_jp_hl(&mut self, _: u8) -> Step {
+        self.reg.pc = self.reg.hl;
+        Step::Run(4)
+    }
+
+    fn op_ex_de_hl(&mut self, _: u8) -> Step {
+        std::mem::swap(&mut self.reg.de, &mut self.reg.hl);
+        Step::Run(4)
+    }
+
+    fn op_xor_n(&mut self, _: u8) -> Step {
+        let opr = self.mem_ref8(self.reg.pc);
+        self.reg.add_pc(1);
+        let res = self.reg.a ^ opr;
+        self.affect_flag_or_xor(res);
+        self.reg.a = res;
+        Step::Run(7)
+    }
+
     pub fn step(&mut self) -> Step {
         let op = self.mem_ref8(self.reg.pc);
         let mut run_op = |f: fn(&mut Self, u8) -> Step| {
@@ -1053,6 +1072,10 @@ impl Emulator {
             0xde => run_op(Self::op_sbc_a_n),
             0xe3 => run_op(Self::op_ex_ind_sp_hl),
             0xe6 => run_op(Self::op_and_n),
+            0xe9 => run_op(Self::op_jp_hl),
+            0xeb => run_op(Self::op_ex_de_hl),
+            0xed => run_op(Self::op_extended),
+            0xee => run_op(Self::op_xor_n),
             _ => Step::IllegalInstruction,
         }
     }
@@ -1064,6 +1087,11 @@ impl Emulator {
 
     fn op_ix(&mut self, _: u8) -> Step {
         // TODO ix instructions
+        Step::IllegalInstruction
+    }
+
+    fn op_extended(&mut self, _: u8) -> Step {
+        // todo extended instructions
         Step::IllegalInstruction
     }
 }
