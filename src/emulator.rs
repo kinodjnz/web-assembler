@@ -1397,6 +1397,55 @@ impl Emulator {
         Step::Run(16)
     }
 
+    fn op_repeat(&mut self, break_cond: bool, when_break: Step, when_repeat: Step) -> Step {
+        if break_cond {
+            when_break
+        } else {
+            self.reg.add_pc(0xfffe);
+            when_repeat
+        }
+    }
+
+    fn op_ldir(&mut self, op: u8) -> Step {
+        self.op_ldi(op);
+        self.op_repeat(self.reg.bc == 0, Step::Run(16), Step::Run(21))
+    }
+
+    fn op_cpir(&mut self, op: u8) -> Step {
+        self.op_cpi(op);
+        self.op_repeat(self.reg.bc == 0, Step::Run(16), Step::Run(21))
+    }
+
+    fn op_inir(&mut self, op: u8) -> Step {
+        self.op_ini(op);
+        self.op_repeat(self.reg.b() == 0, Step::Run(16), Step::Run(21))
+    }
+
+    fn op_otir(&mut self, op: u8) -> Step {
+        self.op_outi(op);
+        self.op_repeat(self.reg.b() == 0, Step::Run(16), Step::Run(21))
+    }
+
+    fn op_lddr(&mut self, op: u8) -> Step {
+        self.op_ldd(op);
+        self.op_repeat(self.reg.bc == 0, Step::Run(16), Step::Run(21))
+    }
+
+    fn op_cpdr(&mut self, op: u8) -> Step {
+        self.op_cpd(op);
+        self.op_repeat(self.reg.bc == 0, Step::Run(16), Step::Run(21))
+    }
+
+    fn op_indr(&mut self, op: u8) -> Step {
+        self.op_ind(op);
+        self.op_repeat(self.reg.b() == 0, Step::Run(16), Step::Run(21))
+    }
+
+    fn op_otdr(&mut self, op: u8) -> Step {
+        self.op_outd(op);
+        self.op_repeat(self.reg.b() == 0, Step::Run(16), Step::Run(21))
+    }
+
     fn op_extended(&mut self, _: u8) -> Step {
         let op = self.mem_ref8(self.reg.pc);
         let mut run_op = |f: fn(&mut Self, u8) -> Step| self.run_op(op, f);
@@ -1427,6 +1476,14 @@ impl Emulator {
             0xa9 => run_op(Self::op_cpd),
             0xaa => run_op(Self::op_ind),
             0xab => run_op(Self::op_outd),
+            0xb0 => run_op(Self::op_ldir),
+            0xb1 => run_op(Self::op_cpir),
+            0xb2 => run_op(Self::op_inir),
+            0xb3 => run_op(Self::op_otir),
+            0xb8 => run_op(Self::op_lddr),
+            0xb9 => run_op(Self::op_cpdr),
+            0xba => run_op(Self::op_indr),
+            0xbb => run_op(Self::op_otdr),
             _ => Step::IllegalInstruction,
         }
     }
