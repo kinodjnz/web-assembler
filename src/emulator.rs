@@ -474,6 +474,26 @@ impl Emulator {
         self.reg.f.pv = PVFlag::from_bool(bc == 0);
     }
 
+    fn affect_flag_ini_ind(&mut self, _opr: u8, b: u8, _c: u8) {
+        self.reg.f.set_wo_z(Flag::F53_MASK | Flag::S_MASK, b);
+        self.reg.f.zf = ZFlag::Acc(b);
+        // TODO H, N, PV, C are not implemented
+        self.reg
+            .f
+            .set_wo_z(Flag::H_MASK | Flag::N_MASK | Flag::C_MASK, 0);
+        self.reg.f.pv = PVFlag::Overflow(0);
+    }
+
+    fn affect_flag_outi_outd(&mut self, _opr: u8, b: u8, _l: u8) {
+        self.reg.f.set_wo_z(Flag::F53_MASK | Flag::S_MASK, b);
+        self.reg.f.zf = ZFlag::Acc(b);
+        // TODO H, N, PV, C are not implemented
+        self.reg
+            .f
+            .set_wo_z(Flag::H_MASK | Flag::N_MASK | Flag::C_MASK, 0);
+        self.reg.f.pv = PVFlag::Overflow(0);
+    }
+
     fn run_op(&mut self, op: u8, f: fn(&mut Self, u8) -> Step) -> Step {
         self.reg.add_pc(1);
         f(self, op)
@@ -1323,6 +1343,60 @@ impl Emulator {
         Step::Run(16)
     }
 
+    fn op_ini(&mut self, _: u8) -> Step {
+        let x = 0x00u8; // TODO implement
+        self.mem_store8(self.reg.hl, x);
+        self.reg.hl = self.reg.hl.wrapping_add(1);
+        self.reg.set_b(self.reg.b().wrapping_sub(1));
+        self.affect_flag_ini_ind(x, self.reg.b(), self.reg.c());
+        Step::Run(16)
+    }
+
+    fn op_outi(&mut self, _: u8) -> Step {
+        let x = self.mem_ref8(self.reg.hl);
+        // TODO write _x to port C
+        self.reg.hl = self.reg.hl.wrapping_add(1);
+        self.reg.set_b(self.reg.b().wrapping_sub(1));
+        self.affect_flag_outi_outd(x, self.reg.b(), self.reg.l());
+        Step::Run(16)
+    }
+
+    fn op_ldd(&mut self, _: u8) -> Step {
+        let x = self.mem_ref8(self.reg.hl);
+        self.mem_store8(self.reg.de, x);
+        self.reg.hl = self.reg.hl.wrapping_sub(1);
+        self.reg.de = self.reg.de.wrapping_sub(1);
+        self.reg.bc = self.reg.bc.wrapping_sub(1);
+        self.affect_flag_ldi_ldd(self.reg.a, x, self.reg.bc);
+        Step::Run(16)
+    }
+
+    fn op_cpd(&mut self, _: u8) -> Step {
+        let x = self.mem_ref8(self.reg.hl);
+        self.reg.hl = self.reg.hl.wrapping_sub(1);
+        self.reg.bc = self.reg.bc.wrapping_sub(1);
+        self.affect_flag_cpi_cpd(self.reg.a, x, self.reg.bc);
+        Step::Run(16)
+    }
+
+    fn op_ind(&mut self, _: u8) -> Step {
+        let x = 0x00u8; // TODO implement
+        self.mem_store8(self.reg.hl, x);
+        self.reg.hl = self.reg.hl.wrapping_sub(1);
+        self.reg.set_b(self.reg.b().wrapping_sub(1));
+        self.affect_flag_ini_ind(x, self.reg.b(), self.reg.c());
+        Step::Run(16)
+    }
+
+    fn op_outd(&mut self, _: u8) -> Step {
+        let x = self.mem_ref8(self.reg.hl);
+        // TODO write _x to port C
+        self.reg.hl = self.reg.hl.wrapping_sub(1);
+        self.reg.set_b(self.reg.b().wrapping_sub(1));
+        self.affect_flag_outi_outd(x, self.reg.b(), self.reg.l());
+        Step::Run(16)
+    }
+
     fn op_extended(&mut self, _: u8) -> Step {
         let op = self.mem_ref8(self.reg.pc);
         let mut run_op = |f: fn(&mut Self, u8) -> Step| self.run_op(op, f);
@@ -1347,6 +1421,12 @@ impl Emulator {
             0x6f => run_op(Self::op_rld),
             0xa0 => run_op(Self::op_ldi),
             0xa1 => run_op(Self::op_cpi),
+            0xa2 => run_op(Self::op_ini),
+            0xa3 => run_op(Self::op_outi),
+            0xa8 => run_op(Self::op_ldd),
+            0xa9 => run_op(Self::op_cpd),
+            0xaa => run_op(Self::op_ind),
+            0xab => run_op(Self::op_outd),
             _ => Step::IllegalInstruction,
         }
     }
