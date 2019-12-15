@@ -1216,6 +1216,19 @@ impl Emulator {
         Step::Run(14)
     }
 
+    fn op_ld_i_a(&mut self, _: u8) -> Step {
+        self.reg.i = self.reg.a;
+        Step::Run(9)
+    }
+
+    fn op_adc_hl_rr(&mut self, op: u8) -> Step {
+        let opr = self.reg.reg16((op >> 4) & 0x03);
+        let res = self.reg.hl as u32 + opr as u32 + self.reg.f.c_bit() as u32;
+        self.affect_flag_add16(self.reg.hl, opr, res);
+        self.reg.hl = res as u16;
+        Step::Run(15)
+    }
+
     fn op_extended(&mut self, _: u8) -> Step {
         let op = self.mem_ref8(self.reg.pc);
         let mut run_op = |f: fn(&mut Self, u8) -> Step| self.run_op(op, f);
@@ -1229,6 +1242,9 @@ impl Emulator {
             op if op & 0xc7 == 0x44 => run_op(Self::op_neg),
             0x4d => run_op(Self::op_reti),
             op if op & 0xc7 == 0x45 => run_op(Self::op_retn),
+            op if op & 0xc7 == 0x46 => Step::IllegalInstruction, // TODO im n
+            0x47 => run_op(Self::op_ld_i_a),
+            op if op & 0xcf == 0x4a => run_op(Self::op_adc_hl_rr),
             _ => Step::IllegalInstruction,
         }
     }
