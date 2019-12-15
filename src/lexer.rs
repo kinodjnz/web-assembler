@@ -187,17 +187,18 @@ fn keyword_test() {
 
 #[test]
 fn space_test() {
-    let mut lexer = Lexer::new("sub b\n\r\nldi//x\r\tscf".chars());
+    let mut lexer = Lexer::new("sub b\n\r\nldi;x\r\tscf".chars());
     let expected = [
-        (TokenKind::Keyword("sub"), Loc(0)),
-        (TokenKind::Keyword("b"), Loc(0)),
+        (TokenKind::Keyword("sub".into()), Loc(0)),
+        (TokenKind::Keyword("b".into()), Loc(0)),
         (TokenKind::EndOfLine, Loc(0)),
-        (TokenKind::Keyword("ldi"), Loc(2)),
+        (TokenKind::EndOfLine, Loc(1)),
+        (TokenKind::Keyword("ldi".into()), Loc(2)),
         (TokenKind::EndOfLine, Loc(2)),
-        (TokenKind::Keyword("scf"), Loc(3)),
+        (TokenKind::Keyword("scf".into()), Loc(3)),
     ];
-    expected.into_iter().for_each(|(keyword, loc)| {
-        assert_eq!(lexer.next_token().unwrap(), Some(Token::new(keyword, loc)));
+    expected.iter().for_each(|(keyword, loc)| {
+        assert_eq!(lexer.next_token().unwrap(), Some(Token::new(keyword.clone(), *loc)));
     });
     assert_eq!(lexer.next_token().unwrap(), None);
 }
