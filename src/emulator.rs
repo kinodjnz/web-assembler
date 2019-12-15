@@ -46,6 +46,10 @@ impl PVFlag {
             PVFlag::Parity(x) => (x.count_ones() + 1) as u8 & 0x01u8,
         }
     }
+
+    fn from_bool(b: bool) -> PVFlag {
+        PVFlag::Overflow((b as u8) << 7)
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -436,13 +440,38 @@ impl Emulator {
         self.reg.f.pv = PVFlag::Parity(res);
     }
 
-    fn affect_flag_ld_i_or_r(&mut self, res: u8) {
+    fn affect_flag_ld_i_r(&mut self, res: u8) {
         self.reg.f.set_wo_z(
             Flag::S_MASK | Flag::F53_MASK | Flag::H_MASK | Flag::N_MASK,
             res & (Flag::S_MASK | Flag::F53_MASK),
         );
         self.reg.f.zf = ZFlag::Acc(res);
         self.reg.f.pv = PVFlag::Overflow(0); // TODO copy iff
+    }
+
+    fn affect_flag_ldi_ldd(&mut self, a: u8, opr: u8, bc: u16) {
+        let n = a.wrapping_add(opr);
+        self.reg.f.set_wo_z(
+            Flag::F53_MASK | Flag::H_MASK | Flag::N_MASK,
+            (n & Flag::F3_MASK) | ((n << 4) & Flag::F5_MASK),
+        );
+        self.reg.f.pv = PVFlag::from_bool(bc == 0);
+    }
+
+    fn affect_flag_cpi_cpd(&mut self, a: u8, opr: u8, bc: u16) {
+        let res = (a as u32).wrapping_sub(opr as u32);
+        let resl = res as u8;
+        let h = a ^ opr ^ resl;
+        let n = resl.wrapping_sub((h >> 4) & 0x01u8);
+        self.reg.f.set_wo_z(Flag::S_MASK, resl);
+        self.reg.f.set_wo_z(
+            Flag::F53_MASK,
+            (n & Flag::F3_MASK) | ((n << 4) & Flag::F5_MASK),
+        );
+        self.reg.f.set_wo_z(Flag::H_MASK, h);
+        self.reg.f.set_wo_z(Flag::N_MASK, NFlag::Sub.as_bit());
+        self.reg.f.zf = ZFlag::Acc(resl);
+        self.reg.f.pv = PVFlag::from_bool(bc == 0);
     }
 
     fn run_op(&mut self, op: u8, f: fn(&mut Self, u8) -> Step) -> Step {
@@ -1252,13 +1281,13 @@ impl Emulator {
 
     fn op_ld_a_i(&mut self, _: u8) -> Step {
         self.reg.a = self.reg.i;
-        self.affect_flag_ld_i_or_r(self.reg.a);
+        self.affect_flag_ld_i_r(self.reg.a);
         Step::Run(9)
     }
 
     fn op_ld_a_r(&mut self, _: u8) -> Step {
         self.reg.a = self.reg.r;
-        self.affect_flag_ld_i_or_r(self.reg.a);
+        self.affect_flag_ld_i_r(self.reg.a);
         Step::Run(9)
     }
 
@@ -1274,6 +1303,24 @@ impl Emulator {
         self.mem_store8(self.reg.hl, (self.reg.a & 0x0f) | (x << 4));
         self.reg.a = (self.reg.a & 0xf0) | (x >> 4);
         Step::Run(18)
+    }
+
+    fn op_ldi(&mut self, _: u8) -> Step {
+        let x = self.mem_ref8(self.reg.hl);
+        self.mem_store8(self.reg.de, x);
+        self.reg.hl = self.reg.hl.wrapping_add(1);
+        self.reg.de = self.reg.de.wrapping_add(1);
+        self.reg.bc = self.reg.bc.wrapping_sub(1);
+        self.affect_flag_ldi_ldd(self.reg.a, x, self.reg.bc);
+        Step::Run(16)
+    }
+
+    fn op_cpi(&mut self, _: u8) -> Step {
+        let x = self.mem_ref8(self.reg.hl);
+        self.reg.hl = self.reg.hl.wrapping_add(1);
+        self.reg.bc = self.reg.bc.wrapping_sub(1);
+        self.affect_flag_cpi_cpd(self.reg.a, x, self.reg.bc);
+        Step::Run(16)
     }
 
     fn op_extended(&mut self, _: u8) -> Step {
@@ -1298,6 +1345,8 @@ impl Emulator {
             0x5f => run_op(Self::op_ld_a_r),
             0x67 => run_op(Self::op_rrd),
             0x6f => run_op(Self::op_rld),
+            0xa0 => run_op(Self::op_ldi),
+            0xa1 => run_op(Self::op_cpi),
             _ => Step::IllegalInstruction,
         }
     }
