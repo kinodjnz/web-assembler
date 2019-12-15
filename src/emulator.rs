@@ -436,6 +436,15 @@ impl Emulator {
         self.reg.f.pv = PVFlag::Parity(res);
     }
 
+    fn affect_flag_ld_i_or_r(&mut self, res: u8) {
+        self.reg.f.set_wo_z(
+            Flag::S_MASK | Flag::F53_MASK | Flag::H_MASK | Flag::N_MASK,
+            res & (Flag::S_MASK | Flag::F53_MASK),
+        );
+        self.reg.f.zf = ZFlag::Acc(res);
+        self.reg.f.pv = PVFlag::Overflow(0); // TODO copy iff
+    }
+
     fn run_op(&mut self, op: u8, f: fn(&mut Self, u8) -> Step) -> Step {
         self.reg.add_pc(1);
         f(self, op)
@@ -1229,6 +1238,44 @@ impl Emulator {
         Step::Run(15)
     }
 
+    fn op_ld_rr_ind_nn(&mut self, op: u8) -> Step {
+        let nn = self.mem_ref16(self.reg.pc);
+        self.reg.add_pc(2);
+        self.reg.set_reg16((op >> 4) & 0x03, nn);
+        Step::Run(20)
+    }
+
+    fn op_ld_r_a(&mut self, _: u8) -> Step {
+        self.reg.r = self.reg.a;
+        Step::Run(9)
+    }
+
+    fn op_ld_a_i(&mut self, _: u8) -> Step {
+        self.reg.a = self.reg.i;
+        self.affect_flag_ld_i_or_r(self.reg.a);
+        Step::Run(9)
+    }
+
+    fn op_ld_a_r(&mut self, _: u8) -> Step {
+        self.reg.a = self.reg.r;
+        self.affect_flag_ld_i_or_r(self.reg.a);
+        Step::Run(9)
+    }
+
+    fn op_rrd(&mut self, _: u8) -> Step {
+        let x = self.mem_ref8(self.reg.hl);
+        self.mem_store8(self.reg.hl, (self.reg.a << 4) | (x >> 4));
+        self.reg.a = (self.reg.a & 0xf0) | (x & 0x0f);
+        Step::Run(18)
+    }
+
+    fn op_rld(&mut self, _: u8) -> Step {
+        let x = self.mem_ref8(self.reg.hl);
+        self.mem_store8(self.reg.hl, (self.reg.a & 0x0f) | (x << 4));
+        self.reg.a = (self.reg.a & 0xf0) | (x >> 4);
+        Step::Run(18)
+    }
+
     fn op_extended(&mut self, _: u8) -> Step {
         let op = self.mem_ref8(self.reg.pc);
         let mut run_op = |f: fn(&mut Self, u8) -> Step| self.run_op(op, f);
@@ -1245,6 +1292,12 @@ impl Emulator {
             op if op & 0xc7 == 0x46 => Step::IllegalInstruction, // TODO im n
             0x47 => run_op(Self::op_ld_i_a),
             op if op & 0xcf == 0x4a => run_op(Self::op_adc_hl_rr),
+            op if op & 0xcf == 0x4b => run_op(Self::op_ld_rr_ind_nn),
+            0x4f => run_op(Self::op_ld_r_a),
+            0x57 => run_op(Self::op_ld_a_i),
+            0x5f => run_op(Self::op_ld_a_r),
+            0x67 => run_op(Self::op_rrd),
+            0x6f => run_op(Self::op_rld),
             _ => Step::IllegalInstruction,
         }
     }
