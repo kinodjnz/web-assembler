@@ -449,6 +449,15 @@ impl Emulator {
         self.reg.f.pv = PVFlag::Overflow(0); // TODO copy iff
     }
 
+    fn affect_flag_rotate_decimal(&mut self, a: u8) {
+        self.reg.f.set_wo_z(
+            Flag::S_MASK | Flag::F53_MASK | Flag::H_MASK | Flag::N_MASK,
+            a & (Flag::S_MASK | Flag::F53_MASK),
+        );
+        self.reg.f.zf = ZFlag::Acc(a);
+        self.reg.f.pv = PVFlag::Parity(a);
+    }
+
     fn affect_flag_ldi_ldd(&mut self, a: u8, opr: u8, bc: u16) {
         let n = a.wrapping_add(opr);
         self.reg.f.set_wo_z(
@@ -1315,6 +1324,7 @@ impl Emulator {
         let x = self.mem_ref8(self.reg.hl);
         self.mem_store8(self.reg.hl, (self.reg.a << 4) | (x >> 4));
         self.reg.a = (self.reg.a & 0xf0) | (x & 0x0f);
+        self.affect_flag_rotate_decimal(self.reg.a);
         Step::Run(18)
     }
 
@@ -1322,6 +1332,7 @@ impl Emulator {
         let x = self.mem_ref8(self.reg.hl);
         self.mem_store8(self.reg.hl, (self.reg.a & 0x0f) | (x << 4));
         self.reg.a = (self.reg.a & 0xf0) | (x >> 4);
+        self.affect_flag_rotate_decimal(self.reg.a);
         Step::Run(18)
     }
 
