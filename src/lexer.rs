@@ -198,7 +198,10 @@ fn space_test() {
         (TokenKind::Keyword("scf".into()), Loc(3)),
     ];
     expected.iter().for_each(|(keyword, loc)| {
-        assert_eq!(lexer.next_token().unwrap(), Some(Token::new(keyword.clone(), *loc)));
+        assert_eq!(
+            lexer.next_token().unwrap(),
+            Some(Token::new(keyword.clone(), *loc))
+        );
     });
     assert_eq!(lexer.next_token().unwrap(), None);
 }

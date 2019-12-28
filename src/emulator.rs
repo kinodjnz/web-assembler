@@ -1515,7 +1515,55 @@ impl Emulator {
         let x = self.reg.reg8(op & 0x07u8);
         let res = (x << 1) | (x >> 7);
         self.affect_flag_rotate(res, x >> 7);
-        self.reg.set_reg8(res, op & 0x07u8);
+        self.reg.set_reg8(op & 0x07u8, res);
+        Step::Run(8)
+    }
+
+    fn op_rrc_ind_hl(&mut self, _: u8) -> Step {
+        let x = self.mem_ref8(self.reg.hl);
+        let res = (x >> 1) | (x << 7);
+        self.affect_flag_rotate(res, x);
+        self.mem_store8(self.reg.hl, res);
+        Step::Run(15)
+    }
+
+    fn op_rrc_r(&mut self, op: u8) -> Step {
+        let x = self.reg.reg8(op & 0x07u8);
+        let res = (x >> 1) | (x << 7);
+        self.affect_flag_rotate(res, x);
+        self.reg.set_reg8(op & 0x07u8, res);
+        Step::Run(8)
+    }
+
+    fn op_rl_ind_hl(&mut self, _: u8) -> Step {
+        let x = self.mem_ref8(self.reg.hl);
+        let res = (x << 1) | self.reg.f.c_bit();
+        self.affect_flag_rotate(res, x >> 7);
+        self.mem_store8(self.reg.hl, res);
+        Step::Run(15)
+    }
+
+    fn op_rl_r(&mut self, op: u8) -> Step {
+        let x = self.reg.reg8(op & 0x07u8);
+        let res = (x << 1) | self.reg.f.c_bit();
+        self.affect_flag_rotate(res, x >> 7);
+        self.reg.set_reg8(op & 0x07u8, res);
+        Step::Run(8)
+    }
+
+    fn op_rr_ind_hl(&mut self, _: u8) -> Step {
+        let x = self.mem_ref8(self.reg.hl);
+        let res = (x >> 1) | (self.reg.f.c_bit() << 7);
+        self.affect_flag_rotate(res, x);
+        self.mem_store8(self.reg.hl, res);
+        Step::Run(15)
+    }
+
+    fn op_rr_r(&mut self, op: u8) -> Step {
+        let x = self.reg.reg8(op & 0x07u8);
+        let res = (x >> 1) | (self.reg.f.c_bit() << 7);
+        self.affect_flag_rotate(res, x);
+        self.reg.set_reg8(op & 0x07u8, res);
         Step::Run(8)
     }
 
@@ -1524,7 +1572,13 @@ impl Emulator {
         let mut run_op = |f: fn(&mut Self, u8) -> Step| self.run_op(op, f);
         match op {
             0x06 => run_op(Self::op_rlc_ind_hl),
-            op if op & 0xf8 == 0xf8 => run_op(Self::op_rlc_r),
+            op if op & 0xf8 == 0x00 => run_op(Self::op_rlc_r),
+            0x0c => run_op(Self::op_rrc_ind_hl),
+            op if op & 0xf8 == 0x08 => run_op(Self::op_rrc_r),
+            0x16 => run_op(Self::op_rl_ind_hl),
+            op if op & 0xf8 == 0x10 => run_op(Self::op_rl_r),
+            0x1c => run_op(Self::op_rr_ind_hl),
+            op if op & 0xf8 == 0x18 => run_op(Self::op_rr_r),
             _ => Step::IllegalInstruction,
         }
     }
