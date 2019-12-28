@@ -397,6 +397,15 @@ impl Emulator {
             Flag::H_MASK | Flag::N_MASK | Flag::C_MASK,
             cf & Flag::C_MASK,
         );
+    }
+
+    fn affect_flag_rotate(&mut self, res: u8, cf: u8) {
+        self.reg.f.set_wo_z(Flag::S_MASK | Flag::F53_MASK, res);
+        self.reg.f.set_wo_z(
+            Flag::H_MASK | Flag::N_MASK | Flag::C_MASK,
+            cf & Flag::C_MASK,
+        );
+        self.reg.f.zf = ZFlag::Acc(res);
         self.reg.f.pv = PVFlag::Parity(res);
     }
 
@@ -1204,11 +1213,6 @@ impl Emulator {
         }
     }
 
-    fn op_bits(&mut self, _: u8) -> Step {
-        // TODO bits instructions
-        Step::IllegalInstruction
-    }
-
     fn op_ix(&mut self, _: u8) -> Step {
         // TODO ix instructions
         Step::IllegalInstruction
@@ -1495,6 +1499,32 @@ impl Emulator {
             0xb9 => run_op(Self::op_cpdr),
             0xba => run_op(Self::op_indr),
             0xbb => run_op(Self::op_otdr),
+            _ => Step::IllegalInstruction,
+        }
+    }
+
+    fn op_rlc_ind_hl(&mut self, _: u8) -> Step {
+        let x = self.mem_ref8(self.reg.hl);
+        let res = (x << 1) | (x >> 7);
+        self.affect_flag_rotate(res, x >> 7);
+        self.mem_store8(self.reg.hl, res);
+        Step::Run(15)
+    }
+
+    fn op_rlc_r(&mut self, op: u8) -> Step {
+        let x = self.reg.reg8(op & 0x07u8);
+        let res = (x << 1) | (x >> 7);
+        self.affect_flag_rotate(res, x >> 7);
+        self.reg.set_reg8(res, op & 0x07u8);
+        Step::Run(8)
+    }
+
+    fn op_bits(&mut self, _: u8) -> Step {
+        let op = self.mem_ref8(self.reg.pc);
+        let mut run_op = |f: fn(&mut Self, u8) -> Step| self.run_op(op, f);
+        match op {
+            0x06 => run_op(Self::op_rlc_ind_hl),
+            op if op & 0xf8 == 0xf8 => run_op(Self::op_rlc_r),
             _ => Step::IllegalInstruction,
         }
     }
