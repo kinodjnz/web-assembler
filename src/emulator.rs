@@ -399,7 +399,7 @@ impl Emulator {
         );
     }
 
-    fn affect_flag_rotate(&mut self, res: u8, cf: u8) {
+    fn affect_flag_rotate_shift(&mut self, res: u8, cf: u8) {
         self.reg.f.set_wo_z(Flag::S_MASK | Flag::F53_MASK, res);
         self.reg.f.set_wo_z(
             Flag::H_MASK | Flag::N_MASK | Flag::C_MASK,
@@ -510,6 +510,16 @@ impl Emulator {
             .f
             .set_wo_z(Flag::H_MASK | Flag::N_MASK | Flag::C_MASK, 0);
         self.reg.f.pv = PVFlag::Overflow(0);
+    }
+
+    fn affect_flag_bit(&mut self, res: u8) {
+        self.reg.f.set_wo_z(Flag::S_MASK | Flag::F53_MASK, res);
+        let z = res == 0;
+        self.reg.f.set_w_z(
+            Flag::Z_MASK | Flag::H_MASK | Flag::N_MASK,
+            Flag::H_MASK | ((z as u8) << 6),
+        );
+        self.reg.f.pv = PVFlag::from_bool(z);
     }
 
     fn run_op(&mut self, op: u8, f: fn(&mut Self, u8) -> Step) -> Step {
@@ -1506,7 +1516,7 @@ impl Emulator {
     fn op_rlc_ind_hl(&mut self, _: u8) -> Step {
         let x = self.mem_ref8(self.reg.hl);
         let res = (x << 1) | (x >> 7);
-        self.affect_flag_rotate(res, x >> 7);
+        self.affect_flag_rotate_shift(res, x >> 7);
         self.mem_store8(self.reg.hl, res);
         Step::Run(15)
     }
@@ -1514,7 +1524,7 @@ impl Emulator {
     fn op_rlc_r(&mut self, op: u8) -> Step {
         let x = self.reg.reg8(op & 0x07u8);
         let res = (x << 1) | (x >> 7);
-        self.affect_flag_rotate(res, x >> 7);
+        self.affect_flag_rotate_shift(res, x >> 7);
         self.reg.set_reg8(op & 0x07u8, res);
         Step::Run(8)
     }
@@ -1522,7 +1532,7 @@ impl Emulator {
     fn op_rrc_ind_hl(&mut self, _: u8) -> Step {
         let x = self.mem_ref8(self.reg.hl);
         let res = (x >> 1) | (x << 7);
-        self.affect_flag_rotate(res, x);
+        self.affect_flag_rotate_shift(res, x);
         self.mem_store8(self.reg.hl, res);
         Step::Run(15)
     }
@@ -1530,7 +1540,7 @@ impl Emulator {
     fn op_rrc_r(&mut self, op: u8) -> Step {
         let x = self.reg.reg8(op & 0x07u8);
         let res = (x >> 1) | (x << 7);
-        self.affect_flag_rotate(res, x);
+        self.affect_flag_rotate_shift(res, x);
         self.reg.set_reg8(op & 0x07u8, res);
         Step::Run(8)
     }
@@ -1538,7 +1548,7 @@ impl Emulator {
     fn op_rl_ind_hl(&mut self, _: u8) -> Step {
         let x = self.mem_ref8(self.reg.hl);
         let res = (x << 1) | self.reg.f.c_bit();
-        self.affect_flag_rotate(res, x >> 7);
+        self.affect_flag_rotate_shift(res, x >> 7);
         self.mem_store8(self.reg.hl, res);
         Step::Run(15)
     }
@@ -1546,7 +1556,7 @@ impl Emulator {
     fn op_rl_r(&mut self, op: u8) -> Step {
         let x = self.reg.reg8(op & 0x07u8);
         let res = (x << 1) | self.reg.f.c_bit();
-        self.affect_flag_rotate(res, x >> 7);
+        self.affect_flag_rotate_shift(res, x >> 7);
         self.reg.set_reg8(op & 0x07u8, res);
         Step::Run(8)
     }
@@ -1554,7 +1564,7 @@ impl Emulator {
     fn op_rr_ind_hl(&mut self, _: u8) -> Step {
         let x = self.mem_ref8(self.reg.hl);
         let res = (x >> 1) | (self.reg.f.c_bit() << 7);
-        self.affect_flag_rotate(res, x);
+        self.affect_flag_rotate_shift(res, x);
         self.mem_store8(self.reg.hl, res);
         Step::Run(15)
     }
@@ -1562,8 +1572,86 @@ impl Emulator {
     fn op_rr_r(&mut self, op: u8) -> Step {
         let x = self.reg.reg8(op & 0x07u8);
         let res = (x >> 1) | (self.reg.f.c_bit() << 7);
-        self.affect_flag_rotate(res, x);
+        self.affect_flag_rotate_shift(res, x);
         self.reg.set_reg8(op & 0x07u8, res);
+        Step::Run(8)
+    }
+
+    fn op_sla_ind_hl(&mut self, _: u8) -> Step {
+        let x = self.mem_ref8(self.reg.hl);
+        let res = x << 1;
+        self.affect_flag_rotate_shift(res, x >> 7);
+        self.mem_store8(self.reg.hl, res);
+        Step::Run(15)
+    }
+
+    fn op_sla_r(&mut self, op: u8) -> Step {
+        let x = self.reg.reg8(op & 0x07u8);
+        let res = x << 1;
+        self.affect_flag_rotate_shift(res, x >> 7);
+        self.reg.set_reg8(op & 0x07u8, res);
+        Step::Run(8)
+    }
+
+    fn op_sra_ind_hl(&mut self, _: u8) -> Step {
+        let x = self.mem_ref8(self.reg.hl);
+        let res = (x as i8 >> 1) as u8;
+        self.affect_flag_rotate_shift(res, x);
+        self.mem_store8(self.reg.hl, res);
+        Step::Run(15)
+    }
+
+    fn op_sra_r(&mut self, op: u8) -> Step {
+        let x = self.reg.reg8(op & 0x07u8);
+        let res = (x as i8 >> 1) as u8;
+        self.affect_flag_rotate_shift(res, x);
+        self.reg.set_reg8(op & 0x07u8, res);
+        Step::Run(8)
+    }
+
+    fn op_sll_ind_hl(&mut self, _: u8) -> Step {
+        let x = self.mem_ref8(self.reg.hl);
+        let res = (x << 1) | 0x01u8;
+        self.affect_flag_rotate_shift(res, x >> 7);
+        self.mem_store8(self.reg.hl, res);
+        Step::Run(15)
+    }
+
+    fn op_sll_r(&mut self, op: u8) -> Step {
+        let x = self.reg.reg8(op & 0x07u8);
+        let res = (x << 1) | 0x01u8;
+        self.affect_flag_rotate_shift(res, x >> 7);
+        self.reg.set_reg8(op & 0x07u8, res);
+        Step::Run(8)
+    }
+
+    fn op_srl_ind_hl(&mut self, _: u8) -> Step {
+        let x = self.mem_ref8(self.reg.hl);
+        let res = x >> 1;
+        self.affect_flag_rotate_shift(res, x);
+        self.mem_store8(self.reg.hl, res);
+        Step::Run(15)
+    }
+
+    fn op_srl_r(&mut self, op: u8) -> Step {
+        let x = self.reg.reg8(op & 0x07u8);
+        let res = x >> 1;
+        self.affect_flag_rotate_shift(res, x);
+        self.reg.set_reg8(op & 0x07u8, res);
+        Step::Run(8)
+    }
+
+    fn op_bit_ind_hl(&mut self, op: u8) -> Step {
+        let x = self.mem_ref8(self.reg.hl);
+        let res = x & (0x01u8 << ((op >> 3) & 0x07));
+        self.affect_flag_bit(res);
+        Step::Run(12)
+    }
+
+    fn op_bit_r(&mut self, op: u8) -> Step {
+        let x = self.reg.reg8(op & 0x07u8);
+        let res = x & (0x01u8 << ((op >> 3) & 0x07));
+        self.affect_flag_bit(res);
         Step::Run(8)
     }
 
@@ -1579,6 +1667,16 @@ impl Emulator {
             op if op & 0xf8 == 0x10 => run_op(Self::op_rl_r),
             0x1c => run_op(Self::op_rr_ind_hl),
             op if op & 0xf8 == 0x18 => run_op(Self::op_rr_r),
+            0x26 => run_op(Self::op_sla_ind_hl),
+            op if op & 0xf8 == 0x20 => run_op(Self::op_sla_r),
+            0x2c => run_op(Self::op_sra_ind_hl),
+            op if op & 0xf8 == 0x28 => run_op(Self::op_sra_r),
+            0x36 => run_op(Self::op_sll_ind_hl),
+            op if op & 0xf8 == 0x30 => run_op(Self::op_sll_r),
+            0x3c => run_op(Self::op_srl_ind_hl),
+            op if op & 0xf8 == 0x38 => run_op(Self::op_srl_r),
+            op if op & 0xc7 == 0x46 => run_op(Self::op_bit_ind_hl),
+            op if op & 0xc0 == 0x40 => run_op(Self::op_bit_r),
             _ => Step::IllegalInstruction,
         }
     }
