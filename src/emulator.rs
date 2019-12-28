@@ -1655,6 +1655,34 @@ impl Emulator {
         Step::Run(8)
     }
 
+    fn op_res_ind_hl(&mut self, op: u8) -> Step {
+        let x = self.mem_ref8(self.reg.hl);
+        let res = x & !(0x01u8 << ((op >> 3) & 0x07));
+        self.mem_store8(self.reg.hl, res);
+        Step::Run(15)
+    }
+
+    fn op_res_r(&mut self, op: u8) -> Step {
+        let x = self.reg.reg8(op & 0x07u8);
+        let res = x & !(0x01u8 << ((op >> 3) & 0x07));
+        self.reg.set_reg8(op & 0x07u8, res);
+        Step::Run(8)
+    }
+
+    fn op_set_ind_hl(&mut self, op: u8) -> Step {
+        let x = self.mem_ref8(self.reg.hl);
+        let res = x | (0x01u8 << ((op >> 3) & 0x07));
+        self.mem_store8(self.reg.hl, res);
+        Step::Run(15)
+    }
+
+    fn op_set_r(&mut self, op: u8) -> Step {
+        let x = self.reg.reg8(op & 0x07u8);
+        let res = x | (0x01u8 << ((op >> 3) & 0x07));
+        self.reg.set_reg8(op & 0x07u8, res);
+        Step::Run(8)
+    }
+
     fn op_bits(&mut self, _: u8) -> Step {
         let op = self.mem_ref8(self.reg.pc);
         let mut run_op = |f: fn(&mut Self, u8) -> Step| self.run_op(op, f);
@@ -1677,6 +1705,10 @@ impl Emulator {
             op if op & 0xf8 == 0x38 => run_op(Self::op_srl_r),
             op if op & 0xc7 == 0x46 => run_op(Self::op_bit_ind_hl),
             op if op & 0xc0 == 0x40 => run_op(Self::op_bit_r),
+            op if op & 0xc7 == 0x86 => run_op(Self::op_res_ind_hl),
+            op if op & 0xc0 == 0x80 => run_op(Self::op_res_r),
+            op if op & 0xc7 == 0xc6 => run_op(Self::op_set_ind_hl),
+            op if op & 0xc0 == 0xc0 => run_op(Self::op_set_r),
             _ => Step::IllegalInstruction,
         }
     }
