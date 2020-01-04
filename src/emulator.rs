@@ -2042,6 +2042,37 @@ impl Emulator {
         Step::Run(19)
     }
 
+    fn op_pop_ixy(&mut self, ixy: IXY, _: u8) -> Step {
+        let value = self.mem_ref16(self.reg.sp);
+        self.reg.sp = self.reg.sp.wrapping_add(2);
+        self.reg.set_reg_ixy16(ixy, 2, value);
+        Step::Run(14)
+    }
+
+    fn op_ex_ind_sp_ixy(&mut self, ixy: IXY, _: u8) -> Step {
+        let old_mem = self.mem_ref16(self.reg.sp);
+        self.mem_store16(self.reg.sp, self.reg.reg_ixy16(ixy, 2));
+        self.reg.hl = old_mem;
+        Step::Run(23)
+    }
+
+    fn op_push_ixy(&mut self, ixy: IXY, _: u8) -> Step {
+        self.reg.sp = self.reg.sp.wrapping_sub(2);
+        let value = self.reg.reg_ixy16(ixy, 2);
+        self.mem_store16(self.reg.sp, value);
+        Step::Run(15)
+    }
+
+    fn op_jp_ixy(&mut self, ixy: IXY, _: u8) -> Step {
+        self.reg.pc = self.reg.reg_ixy16(ixy, 2);
+        Step::Run(8)
+    }
+
+    fn op_ld_sp_ixy(&mut self, ixy: IXY, _: u8) -> Step {
+        self.reg.sp = self.reg.reg_ixy16(ixy, 2);
+        Step::Run(10)
+    }
+
     fn op_ixy(&mut self, ixy: IXY) -> Step {
         let op = self.mem_ref8(self.reg.pc);
         let mut run_op = |f: fn(&mut Self, IXY, u8) -> Step| {
@@ -2083,6 +2114,11 @@ impl Emulator {
             op if op & 0xfe == 0xbc => run_op(Self::op_cp_ixy8),
             0xbe => run_op(Self::op_cp_ind_ixy),
             0xcb => run_op(Self::op_bits_ixy),
+            0xe1 => run_op(Self::op_pop_ixy),
+            0xe3 => run_op(Self::op_ex_ind_sp_ixy),
+            0xe5 => run_op(Self::op_push_ixy),
+            0xe9 => run_op(Self::op_jp_ixy),
+            0xf9 => run_op(Self::op_ld_sp_ixy),
             _ => Step::IllegalInstruction,
         }
     }
