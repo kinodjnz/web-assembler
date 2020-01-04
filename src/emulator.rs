@@ -1982,6 +1982,36 @@ impl Emulator {
         Step::Run(19)
     }
 
+    fn op_and_ixy8(&mut self, ixy: IXY, op: u8) -> Step {
+        let res = self.reg.a & self.reg.reg_ixy8(ixy, op & 0x07);
+        self.affect_flag_and(res);
+        self.reg.a = res;
+        Step::Run(8)
+    }
+
+    fn op_and_ind_ixy(&mut self, ixy: IXY, _: u8) -> Step {
+        let addr = self.ixy_offset(ixy);
+        let res = self.reg.a & self.mem_ref8(addr);
+        self.affect_flag_and(res);
+        self.reg.a = res;
+        Step::Run(19)
+    }
+
+    fn op_xor_ixy8(&mut self, ixy: IXY, op: u8) -> Step {
+        let res = self.reg.a ^ self.reg.reg_ixy8(ixy, op & 0x07);
+        self.affect_flag_or_xor(res);
+        self.reg.a = res;
+        Step::Run(8)
+    }
+
+    fn op_xor_ind_ixy(&mut self, ixy: IXY, _: u8) -> Step {
+        let addr = self.ixy_offset(ixy);
+        let res = self.reg.a ^ self.mem_ref8(addr);
+        self.affect_flag_or_xor(res);
+        self.reg.a = res;
+        Step::Run(19)
+    }
+
     fn op_ixy(&mut self, ixy: IXY) -> Step {
         let op = self.mem_ref8(self.reg.pc);
         let mut run_op = |f: fn(&mut Self, IXY, u8) -> Step| {
@@ -2014,6 +2044,10 @@ impl Emulator {
             0x96 => run_op(Self::op_sub_ind_ixy),
             op if op & 0xfe == 0x9c => run_op(Self::op_sbc_a_ixy8),
             0x9e => run_op(Self::op_sbc_a_ind_ixy),
+            op if op & 0xfe == 0xa4 => run_op(Self::op_and_ixy8),
+            0xa6 => run_op(Self::op_and_ind_ixy),
+            op if op & 0xfe == 0xac => run_op(Self::op_xor_ixy8),
+            0xae => run_op(Self::op_xor_ind_ixy),
             _ => Step::IllegalInstruction,
         }
     }
