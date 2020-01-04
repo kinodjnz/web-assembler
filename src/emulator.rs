@@ -1945,6 +1945,44 @@ impl Emulator {
         Step::Run(19)
     }
 
+    fn op_sub_ixy8(&mut self, ixy: IXY, op: u8) -> Step {
+        let opr = self.reg.reg_ixy8(ixy, op & 0x07);
+        let res = (self.reg.a as u32).wrapping_sub(opr as u32);
+        self.affect_flag_sub8(self.reg.a, opr, res);
+        self.reg.a = res as u8;
+        Step::Run(8)
+    }
+
+    fn op_sub_ind_ixy(&mut self, ixy: IXY, _: u8) -> Step {
+        let addr = self.ixy_offset(ixy);
+        let opr = self.mem_ref8(addr);
+        let res = (self.reg.a as u32).wrapping_sub(opr as u32);
+        self.affect_flag_sub8(self.reg.a, opr, res);
+        self.reg.a = res as u8;
+        Step::Run(19)
+    }
+
+    fn op_sbc_a_ixy8(&mut self, ixy: IXY, op: u8) -> Step {
+        let opr = self.reg.reg_ixy8(ixy, op & 0x07);
+        let res = (self.reg.a as u32)
+            .wrapping_sub(opr as u32)
+            .wrapping_sub(self.reg.f.c_bit() as u32);
+        self.affect_flag_sub8(self.reg.a, opr, res);
+        self.reg.a = res as u8;
+        Step::Run(8)
+    }
+
+    fn op_sbc_a_ind_ixy(&mut self, ixy: IXY, _: u8) -> Step {
+        let addr = self.ixy_offset(ixy);
+        let opr = self.mem_ref8(addr);
+        let res = (self.reg.a as u32)
+            .wrapping_sub(opr as u32)
+            .wrapping_sub(self.reg.f.c_bit() as u32);
+        self.affect_flag_sub8(self.reg.a, opr, res);
+        self.reg.a = res as u8;
+        Step::Run(19)
+    }
+
     fn op_ixy(&mut self, ixy: IXY) -> Step {
         let op = self.mem_ref8(self.reg.pc);
         let mut run_op = |f: fn(&mut Self, IXY, u8) -> Step| {
@@ -1973,6 +2011,10 @@ impl Emulator {
             0x86 => run_op(Self::op_add_a_ind_ixy),
             op if op & 0xfe == 0x8c => run_op(Self::op_adc_a_ixy8),
             0x8e => run_op(Self::op_adc_a_ind_ixy),
+            op if op & 0xfe == 0x94 => run_op(Self::op_sub_ixy8),
+            0x96 => run_op(Self::op_sub_ind_ixy),
+            op if op & 0xfe == 0x9c => run_op(Self::op_sbc_a_ixy8),
+            0x9e => run_op(Self::op_sbc_a_ind_ixy),
             _ => Step::IllegalInstruction,
         }
     }
