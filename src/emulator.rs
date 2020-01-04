@@ -1809,11 +1809,57 @@ impl Emulator {
         Step::Run(14)
     }
 
-    fn op_ld_ind_nn_ixy(&mut self, ixy: IXY, op: u8) -> Step {
+    fn op_ld_ind_nn_ixy(&mut self, ixy: IXY, _: u8) -> Step {
         let nn = self.mem_ref16(self.reg.pc);
         self.reg.add_pc(2);
         self.mem_store16(nn, self.reg.reg_ixy16(ixy, 2));
         Step::Run(20)
+    }
+
+    fn op_inc_ixy(&mut self, ixy: IXY, op: u8) -> Step {
+        let index = (op >> 4) & 0x03;
+        let opr = self.reg.reg_ixy16(ixy, index);
+        self.reg.set_reg_ixy16(ixy, index, opr.wrapping_add(1));
+        Step::Run(10)
+    }
+
+    fn op_inc_ixy8(&mut self, ixy: IXY, op: u8) -> Step {
+        let index = (op >> 3) & 0x07;
+        let opr = self.reg.reg_ixy8(ixy, index);
+        let res = opr as u32 + 1;
+        self.affect_flag_inc8(opr, res);
+        self.reg.set_reg_ixy8(ixy, index, res as u8);
+        Step::Run(8)
+    }
+
+    fn op_dec_ixy8(&mut self, ixy: IXY, op: u8) -> Step {
+        let index = (op >> 3) & 0x07;
+        let opr = self.reg.reg_ixy8(ixy, index);
+        let res = (opr as u32).wrapping_sub(1);
+        self.affect_flag_dec8(opr, res);
+        self.reg.set_reg_ixy8(ixy, index, res as u8);
+        Step::Run(8)
+    }
+
+    fn op_ld_ixy8_n(&mut self, ixy: IXY, op: u8) -> Step {
+        let n = self.mem_ref8(self.reg.pc);
+        self.reg.set_reg_ixy8(ixy, (op >> 3) & 0x07, n);
+        self.reg.add_pc(1);
+        Step::Run(11)
+    }
+
+    fn op_ld_ixy_ind_nn(&mut self, ixy: IXY, _: u8) -> Step {
+        let nn = self.mem_ref16(self.reg.pc);
+        self.reg.add_pc(2);
+        self.reg.set_reg_ixy16(ixy, 2, self.mem_ref16(nn));
+        Step::Run(16)
+    }
+
+    fn op_dec_ixy(&mut self, ixy: IXY, op: u8) -> Step {
+        let index = (op >> 4) & 0x03;
+        let opr = self.reg.reg_ixy16(ixy, index);
+        self.reg.set_reg_ixy16(ixy, index, opr.wrapping_sub(1));
+        Step::Run(10)
     }
 
     fn op_ixy(&mut self, ixy: IXY, op: u8) -> Step {
@@ -1825,6 +1871,12 @@ impl Emulator {
             op if op & 0xcf == 0x09 => run_op(Self::op_add_ixy_rr),
             0x21 => run_op(Self::op_ld_ixy_nn),
             0x22 => run_op(Self::op_ld_ind_nn_ixy),
+            0x23 => run_op(Self::op_inc_ixy),
+            op if op & 0xf7 == 0x24 => run_op(Self::op_inc_ixy8),
+            op if op & 0xf7 == 0x25 => run_op(Self::op_dec_ixy8),
+            op if op & 0xf7 == 0x26 => run_op(Self::op_ld_ixy8_n),
+            0x2a => run_op(Self::op_ld_ixy_ind_nn),
+            0x2b => run_op(Self::op_dec_ixy),
             _ => Step::IllegalInstruction,
         }
     }
