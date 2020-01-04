@@ -209,6 +209,22 @@ impl Register {
         self.hl.low()
     }
 
+    fn ixh(&self) -> u8 {
+        self.ix.high()
+    }
+
+    fn ixl(&self) -> u8 {
+        self.ix.low()
+    }
+
+    fn iyh(&self) -> u8 {
+        self.iy.high()
+    }
+
+    fn iyl(&self) -> u8 {
+        self.iy.low()
+    }
+
     fn set_b(&mut self, x: u8) {
         self.bc = (self.bc & 0x00ff) | ((x as u16) << 8);
     }
@@ -233,6 +249,22 @@ impl Register {
         self.hl = (self.hl & 0xff00) | x as u16;
     }
 
+    fn set_ixh(&mut self, x: u8) {
+        self.ix = (self.ix & 0x00ff) | ((x as u16) << 8);
+    }
+
+    fn set_ixl(&mut self, x: u8) {
+        self.ix = (self.ix & 0xff00) | x as u16;
+    }
+
+    fn set_iyh(&mut self, x: u8) {
+        self.iy = (self.iy & 0x00ff) | ((x as u16) << 8);
+    }
+
+    fn set_iyl(&mut self, x: u8) {
+        self.iy = (self.iy & 0xff00) | x as u16;
+    }
+
     fn reg8(&self, index: u8) -> u8 {
         match index {
             0 => self.b(),
@@ -246,6 +278,16 @@ impl Register {
         }
     }
 
+    fn reg_ixy8(&self, ixy: IXY, index: u8) -> u8 {
+        match (ixy, index) {
+            (IXY::IX, 4) => self.ixh(),
+            (IXY::IX, 5) => self.ixl(),
+            (IXY::IY, 4) => self.iyh(),
+            (IXY::IY, 5) => self.iyl(),
+            i => panic!("unknown register: {:?}", i),
+        }
+    }
+
     fn reg16(&self, index: u8) -> u16 {
         match index {
             0 => self.bc,
@@ -253,6 +295,17 @@ impl Register {
             2 => self.hl,
             3 => self.sp,
             i => panic!("unknown register: {}", i),
+        }
+    }
+
+    fn reg_ixy16(&self, ixy: IXY, index: u8) -> u16 {
+        match (ixy, index) {
+            (_, 0) => self.bc,
+            (_, 1) => self.de,
+            (IXY::IX, 2) => self.ix,
+            (IXY::IY, 2) => self.iy,
+            (_, 3) => self.sp,
+            i => panic!("unknown register: {:?}", i),
         }
     }
 
@@ -269,6 +322,16 @@ impl Register {
         };
     }
 
+    fn set_reg_ixy8(&mut self, ixy: IXY, index: u8, value: u8) {
+        match (ixy, index) {
+            (IXY::IX, 4) => self.set_ixh(value),
+            (IXY::IX, 5) => self.set_ixl(value),
+            (IXY::IY, 4) => self.set_iyh(value),
+            (IXY::IY, 5) => self.set_iyl(value),
+            i => panic!("unknown register: {:?}", i),
+        };
+    }
+
     fn set_reg16(&mut self, index: u8, value: u16) {
         match index {
             0 => self.bc = value,
@@ -276,6 +339,17 @@ impl Register {
             2 => self.hl = value,
             3 => self.sp = value,
             i => panic!("unknown register: {}", i),
+        };
+    }
+
+    fn set_reg_ixy16(&mut self, ixy: IXY, index: u8, value: u16) {
+        match (ixy, index) {
+            (_, 0) => self.bc = value,
+            (_, 1) => self.de = value,
+            (IXY::IX, 2) => self.ix = value,
+            (IXY::IY, 2) => self.iy = value,
+            (_, 3) => self.sp = value,
+            i => panic!("unknown register: {:?}", i),
         };
     }
 
@@ -299,6 +373,12 @@ pub enum Step {
     Halt,
     IllegalInstruction,
     Run(i32),
+}
+
+#[derive(Debug, Clone, Copy)]
+enum IXY {
+    IX,
+    IY,
 }
 
 impl Emulator {
@@ -1223,16 +1303,6 @@ impl Emulator {
         }
     }
 
-    fn op_ix(&mut self, _: u8) -> Step {
-        // TODO ix instructions
-        Step::IllegalInstruction
-    }
-
-    fn op_iy(&mut self, _: u8) -> Step {
-        // TODO iy instructions
-        Step::IllegalInstruction
-    }
-
     fn op_in_f_ind_c(&mut self, _: u8) -> Step {
         // TODO unimplemented
         let res = 0x00u8;
@@ -1709,6 +1779,52 @@ impl Emulator {
             op if op & 0xc0 == 0x80 => run_op(Self::op_res_r),
             op if op & 0xc7 == 0xc6 => run_op(Self::op_set_ind_hl),
             op if op & 0xc0 == 0xc0 => run_op(Self::op_set_r),
+            _ => Step::IllegalInstruction,
+        }
+    }
+
+    fn op_ix(&mut self, _: u8) -> Step {
+        let op = self.mem_ref8(self.reg.pc);
+        self.op_ixy(IXY::IX, op)
+    }
+
+    fn op_iy(&mut self, _: u8) -> Step {
+        let op = self.mem_ref8(self.reg.pc);
+        self.op_ixy(IXY::IY, op)
+    }
+
+    fn op_add_ixy_rr(&mut self, ixy: IXY, op: u8) -> Step {
+        let opr2 = self.reg.reg_ixy16(ixy, (op >> 4) & 0x03);
+        let opr1 = self.reg.reg_ixy16(ixy, 2);
+        let res = opr1 as u32 + opr2 as u32;
+        self.affect_flag_add16(opr1, opr2, res);
+        self.reg.set_reg_ixy16(ixy, 2, res as u16);
+        Step::Run(15)
+    }
+
+    fn op_ld_ixy_nn(&mut self, ixy: IXY, op: u8) -> Step {
+        let nn = self.mem_ref16(self.reg.pc);
+        self.reg.add_pc(2);
+        self.reg.set_reg_ixy16(ixy, (op >> 4) & 0x03, nn);
+        Step::Run(14)
+    }
+
+    fn op_ld_ind_nn_ixy(&mut self, ixy: IXY, op: u8) -> Step {
+        let nn = self.mem_ref16(self.reg.pc);
+        self.reg.add_pc(2);
+        self.mem_store16(nn, self.reg.reg_ixy16(ixy, 2));
+        Step::Run(20)
+    }
+
+    fn op_ixy(&mut self, ixy: IXY, op: u8) -> Step {
+        let mut run_op = |f: fn(&mut Self, IXY, u8) -> Step| {
+            self.reg.add_pc(1);
+            f(self, ixy, op)
+        };
+        match op {
+            op if op & 0xcf == 0x09 => run_op(Self::op_add_ixy_rr),
+            0x21 => run_op(Self::op_ld_ixy_nn),
+            0x22 => run_op(Self::op_ld_ind_nn_ixy),
             _ => Step::IllegalInstruction,
         }
     }
