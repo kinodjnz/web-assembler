@@ -86,7 +86,6 @@ impl Flag {
     const F5_MASK: u8 = 0x20u8;
     const H_MASK: u8 = 0x10u8;
     const F3_MASK: u8 = 0x08u8;
-    const PV_MASK: u8 = 0x04u8;
     const N_MASK: u8 = 0x02u8;
     const C_MASK: u8 = 0x01u8;
     const F53_MASK: u8 = Flag::F5_MASK | Flag::F3_MASK;
