@@ -1784,13 +1784,11 @@ impl Emulator {
     }
 
     fn op_ix(&mut self, _: u8) -> Step {
-        let op = self.mem_ref8(self.reg.pc);
-        self.op_ixy(IXY::IX, op)
+        self.op_ixy(IXY::IX)
     }
 
     fn op_iy(&mut self, _: u8) -> Step {
-        let op = self.mem_ref8(self.reg.pc);
-        self.op_ixy(IXY::IY, op)
+        self.op_ixy(IXY::IY)
     }
 
     fn op_add_ixy_rr(&mut self, ixy: IXY, op: u8) -> Step {
@@ -1862,7 +1860,30 @@ impl Emulator {
         Step::Run(10)
     }
 
-    fn op_ixy(&mut self, ixy: IXY, op: u8) -> Step {
+    fn op_inc_ind_ixy(&mut self, ixy: IXY, _: u8) -> Step {
+        let offset = self.mem_ref8(self.reg.pc) as i8 as u16;
+        self.reg.add_pc(1);
+        let addr = self.reg.reg_ixy16(ixy, 2).wrapping_add(offset);
+        let opr = self.mem_ref8(addr);
+        let res = opr as u32 + 1;
+        self.affect_flag_inc8(opr, res);
+        self.mem_store8(addr, res as u8);
+        Step::Run(23)
+    }
+
+    fn op_dec_ind_ixy(&mut self, ixy: IXY, _: u8) -> Step {
+        let offset = self.mem_ref8(self.reg.pc) as i8 as u16;
+        self.reg.add_pc(1);
+        let addr = self.reg.reg_ixy16(ixy, 2).wrapping_add(offset);
+        let opr = self.mem_ref8(addr);
+        let res = (opr as u32).wrapping_sub(1);
+        self.affect_flag_dec8(opr, res);
+        self.mem_store8(addr, res as u8);
+        Step::Run(23)
+    }
+
+    fn op_ixy(&mut self, ixy: IXY) -> Step {
+        let op = self.mem_ref8(self.reg.pc);
         let mut run_op = |f: fn(&mut Self, IXY, u8) -> Step| {
             self.reg.add_pc(1);
             f(self, ixy, op)
@@ -1877,6 +1898,8 @@ impl Emulator {
             op if op & 0xf7 == 0x26 => run_op(Self::op_ld_ixy8_n),
             0x2a => run_op(Self::op_ld_ixy_ind_nn),
             0x2b => run_op(Self::op_dec_ixy),
+            0x34 => run_op(Self::op_inc_ind_ixy),
+            0x35 => run_op(Self::op_dec_ind_ixy),
             _ => Step::IllegalInstruction,
         }
     }
