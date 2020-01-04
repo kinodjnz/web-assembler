@@ -2087,7 +2087,209 @@ impl Emulator {
         }
     }
 
-    fn op_bits_ixy(&mut self, ixy: IXY, op: u8) -> Step {
-        Step::IllegalInstruction
+    fn op_rlc_ind_ixy(&mut self, addr: u16, _: u8) -> Step {
+        let x = self.mem_ref8(addr);
+        let res = (x << 1) | (x >> 7);
+        self.affect_flag_rotate_shift(res, x >> 7);
+        self.mem_store8(addr, res);
+        Step::Run(23)
+    }
+
+    fn op_rlc_ind_ixy_r(&mut self, addr: u16, op: u8) -> Step {
+        let x = self.mem_ref8(addr);
+        let res = (x << 1) | (x >> 7);
+        self.affect_flag_rotate_shift(res, x >> 7);
+        self.mem_store8(addr, res);
+        self.reg.set_reg8(op & 0x07u8, res);
+        Step::Run(23)
+    }
+
+    fn op_rrc_ind_ixy(&mut self, addr: u16, _: u8) -> Step {
+        let x = self.mem_ref8(addr);
+        let res = (x >> 1) | (x << 7);
+        self.affect_flag_rotate_shift(res, x);
+        self.mem_store8(addr, res);
+        Step::Run(23)
+    }
+
+    fn op_rrc_ind_ixy_r(&mut self, addr: u16, op: u8) -> Step {
+        let x = self.mem_ref8(addr);
+        let res = (x >> 1) | (x << 7);
+        self.affect_flag_rotate_shift(res, x);
+        self.mem_store8(addr, res);
+        self.reg.set_reg8(op & 0x07u8, res);
+        Step::Run(23)
+    }
+
+    fn op_rl_ind_ixy(&mut self, addr: u16, _: u8) -> Step {
+        let x = self.mem_ref8(addr);
+        let res = (x << 1) | self.reg.f.c_bit();
+        self.affect_flag_rotate_shift(res, x >> 7);
+        self.mem_store8(addr, res);
+        Step::Run(15)
+    }
+
+    fn op_rl_ind_ixy_r(&mut self, addr: u16, op: u8) -> Step {
+        let x = self.mem_ref8(addr);
+        let res = (x << 1) | self.reg.f.c_bit();
+        self.affect_flag_rotate_shift(res, x >> 7);
+        self.mem_store8(addr, res);
+        self.reg.set_reg8(op & 0x07u8, res);
+        Step::Run(23)
+    }
+
+    fn op_rr_ind_ixy(&mut self, addr: u16, _: u8) -> Step {
+        let x = self.mem_ref8(addr);
+        let res = (x >> 1) | (self.reg.f.c_bit() << 7);
+        self.affect_flag_rotate_shift(res, x);
+        self.mem_store8(addr, res);
+        Step::Run(23)
+    }
+
+    fn op_rr_ind_ixy_r(&mut self, addr: u16, op: u8) -> Step {
+        let x = self.mem_ref8(addr);
+        let res = (x >> 1) | (self.reg.f.c_bit() << 7);
+        self.affect_flag_rotate_shift(res, x);
+        self.mem_store8(addr, res);
+        self.reg.set_reg8(op & 0x07u8, res);
+        Step::Run(23)
+    }
+
+    fn op_sla_ind_ixy(&mut self, addr: u16, _: u8) -> Step {
+        let x = self.mem_ref8(addr);
+        let res = x << 1;
+        self.affect_flag_rotate_shift(res, x >> 7);
+        self.mem_store8(addr, res);
+        Step::Run(23)
+    }
+
+    fn op_sla_ind_ixy_r(&mut self, addr: u16, op: u8) -> Step {
+        let x = self.mem_ref8(addr);
+        let res = x << 1;
+        self.affect_flag_rotate_shift(res, x >> 7);
+        self.mem_store8(addr, res);
+        self.reg.set_reg8(op & 0x07u8, res);
+        Step::Run(23)
+    }
+
+    fn op_sra_ind_ixy(&mut self, addr: u16, _: u8) -> Step {
+        let x = self.mem_ref8(addr);
+        let res = (x as i8 >> 1) as u8;
+        self.affect_flag_rotate_shift(res, x);
+        self.mem_store8(addr, res);
+        Step::Run(23)
+    }
+
+    fn op_sra_ind_ixy_r(&mut self, addr: u16, op: u8) -> Step {
+        let x = self.mem_ref8(addr);
+        let res = (x as i8 >> 1) as u8;
+        self.affect_flag_rotate_shift(res, x);
+        self.mem_store8(addr, res);
+        self.reg.set_reg8(op & 0x07u8, res);
+        Step::Run(23)
+    }
+
+    fn op_sll_ind_ixy(&mut self, addr: u16, _: u8) -> Step {
+        let x = self.mem_ref8(addr);
+        let res = (x << 1) | 0x01u8;
+        self.affect_flag_rotate_shift(res, x >> 7);
+        self.mem_store8(addr, res);
+        Step::Run(23)
+    }
+
+    fn op_sll_ind_ixy_r(&mut self, addr: u16, op: u8) -> Step {
+        let x = self.mem_ref8(addr);
+        let res = (x << 1) | 0x01u8;
+        self.affect_flag_rotate_shift(res, x >> 7);
+        self.mem_store8(addr, res);
+        self.reg.set_reg8(op & 0x07u8, res);
+        Step::Run(23)
+    }
+
+    fn op_srl_ind_ixy(&mut self, addr: u16, _: u8) -> Step {
+        let x = self.mem_ref8(addr);
+        let res = x >> 1;
+        self.affect_flag_rotate_shift(res, x);
+        self.mem_store8(addr, res);
+        Step::Run(23)
+    }
+
+    fn op_srl_ind_ixy_r(&mut self, addr: u16, op: u8) -> Step {
+        let x = self.mem_ref8(addr);
+        let res = x >> 1;
+        self.affect_flag_rotate_shift(res, x);
+        self.mem_store8(addr, res);
+        self.reg.set_reg8(op & 0x07u8, res);
+        Step::Run(23)
+    }
+
+    fn op_bit_ind_ixy(&mut self, addr: u16, op: u8) -> Step {
+        let x = self.mem_ref8(addr);
+        let res = x & (0x01u8 << ((op >> 3) & 0x07));
+        self.affect_flag_bit(res);
+        Step::Run(20)
+    }
+
+    fn op_res_ind_ixy(&mut self, addr: u16, op: u8) -> Step {
+        let x = self.mem_ref8(addr);
+        let res = x & !(0x01u8 << ((op >> 3) & 0x07));
+        self.mem_store8(addr, res);
+        Step::Run(23)
+    }
+
+    fn op_res_ind_ixy_r(&mut self, addr: u16, op: u8) -> Step {
+        let x = self.mem_ref8(addr);
+        let res = x & !(0x01u8 << ((op >> 3) & 0x07));
+        self.mem_store8(addr, res);
+        self.reg.set_reg8(op & 0x07u8, res);
+        Step::Run(23)
+    }
+
+    fn op_set_ind_ixy(&mut self, addr: u16, op: u8) -> Step {
+        let x = self.mem_ref8(addr);
+        let res = x | (0x01u8 << ((op >> 3) & 0x07));
+        self.mem_store8(addr, res);
+        Step::Run(23)
+    }
+
+    fn op_set_ind_ixy_r(&mut self, addr: u16, op: u8) -> Step {
+        let x = self.mem_ref8(addr);
+        let res = x | (0x01u8 << ((op >> 3) & 0x07));
+        self.mem_store8(addr, res);
+        self.reg.set_reg8(op & 0x07u8, res);
+        Step::Run(23)
+    }
+
+    fn op_bits_ixy(&mut self, ixy: IXY, _: u8) -> Step {
+        let addr = self.ixy_offset(ixy);
+        let op = self.mem_ref8(self.reg.pc);
+        let mut run_op = |f: fn(&mut Self, u16, u8) -> Step| {
+            self.reg.add_pc(1);
+            f(self, addr, op)
+        };
+        match op {
+            0x06 => run_op(Self::op_rlc_ind_ixy),
+            op if op & 0xf8 == 0x00 => run_op(Self::op_rlc_ind_ixy_r),
+            0x0c => run_op(Self::op_rrc_ind_ixy),
+            op if op & 0xf8 == 0x08 => run_op(Self::op_rrc_ind_ixy_r),
+            0x16 => run_op(Self::op_rl_ind_ixy),
+            op if op & 0xf8 == 0x10 => run_op(Self::op_rl_ind_ixy_r),
+            0x1c => run_op(Self::op_rr_ind_ixy),
+            op if op & 0xf8 == 0x18 => run_op(Self::op_rr_ind_ixy_r),
+            0x26 => run_op(Self::op_sla_ind_ixy),
+            op if op & 0xf8 == 0x20 => run_op(Self::op_sla_ind_ixy_r),
+            0x2c => run_op(Self::op_sra_ind_ixy),
+            op if op & 0xf8 == 0x28 => run_op(Self::op_sra_ind_ixy_r),
+            0x36 => run_op(Self::op_sll_ind_ixy),
+            op if op & 0xf8 == 0x30 => run_op(Self::op_sll_ind_ixy_r),
+            0x3c => run_op(Self::op_srl_ind_ixy),
+            op if op & 0xf8 == 0x38 => run_op(Self::op_srl_ind_ixy_r),
+            op if op & 0xc0 == 0x40 => run_op(Self::op_bit_ind_ixy),
+            op if op & 0xc7 == 0x86 => run_op(Self::op_res_ind_ixy),
+            op if op & 0xc0 == 0x80 => run_op(Self::op_res_ind_ixy_r),
+            op if op & 0xc7 == 0xc6 => run_op(Self::op_set_ind_ixy),
+            op if op & 0xc0 == 0xc0 => run_op(Self::op_set_ind_ixy_r),
+            _ => Step::IllegalInstruction,
+        }
     }
 }
